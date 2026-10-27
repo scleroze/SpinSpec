@@ -104,7 +104,7 @@ The `app/`, `static/` and `templates/` directories contain a FastAPI application
 
 ## Tests and development status
 
-The repository includes a GitHub Actions regression workflow that builds the C executables and compares numerical output for the two-spin and four-spin examples against the base version during pull requests that modify the C core or examples.
+The repository includes a GitHub Actions smoke-test workflow that builds the C executables and runs two-spin and four-spin example calculations on pushes and pull requests. The original numerical regression verification was performed before the first public snapshot; the current public workflow checks that example outputs are generated, not that every numerical value matches a historical baseline.
 
 Planned work includes optional decomposition of transition contributions by spin group and a gyromagnetic-ratio-weighted magnetic-moment observation operator. **Neither capability should be assumed present in the current GitHub `main` numerical engine.**
 
