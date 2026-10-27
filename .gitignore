@@ -1,0 +1,31 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Runtime jobs, logs, and Python caches
+jobs/
+logs/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Generated spectrum files and figures
+Sp_*.dat
+Res_*_*.dat
+data_*.jpg
+
+# Locally compiled binaries
+bin/engine_matrix
+bin/engine_matrix_test
+bin/matrix_graph
+bin/matrix_graph_test
+
+# Temporary backups
+*.bak
+*.tmp
+*~
