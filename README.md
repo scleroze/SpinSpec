@@ -4,6 +4,10 @@ SpinSpec is a spin-1/2 nuclear magnetic resonance (NMR) spectrum simulator. It c
 
 Online project: https://nmrspec.org
 
+[![Zenodo DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23696822.svg)](https://doi.org/10.5281/zenodo.23696822)
+
+**Archived scientific release:** [SpinSpec v1.0.0](https://doi.org/10.5281/zenodo.23696822), DOI: [10.5281/zenodo.23696822](https://doi.org/10.5281/zenodo.23696822).
+
 ## Physical model
 
 For `N` spin-1/2 nuclei, the complete product-basis Hamiltonian has dimension `2^N × 2^N` and includes Zeeman terms (with chemical shifts) and isotropic scalar `J` couplings. The engine diagonalizes the real symmetric matrix using GSL.
@@ -114,6 +118,6 @@ SpinSpec's original source code is distributed under the **GNU General Public Li
 
 The numerical C engine uses GNU Scientific Library (GSL), also under GPL. A standalone installation must provide the dependencies described above. The online service at [nmrspec.org](https://nmrspec.org) is a separate hosted deployment.
 
-**Academic citation:** if SpinSpec contributes to published NMR calculations, please cite the software and its version. See [CITATION.cff](CITATION.cff) for author metadata and the suggested citation. A release-specific DOI will be added after the software is archived with Zenodo. Citation is requested as an academic practice; it is not an additional restriction under the GPL.
+**Academic citation:** if SpinSpec contributes to published NMR calculations, please cite the software and its version. See [CITATION.cff](CITATION.cff) for author metadata and the suggested citation. For scientific work performed with version **v1.0.0**, cite: Kupriyanov, P. (2026). *SpinSpec: Quantum simulation of NMR spectra* (Version 1.0.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23696822. Citation is requested as an academic practice; it is not an additional restriction under the GPL.
 
 Copyright (c) 2026 Pavel Kupriyanov for the original SpinSpec contributions, subject to verification of any employer or contributor rights.
