@@ -1,6 +1,6 @@
 # SpinSpec v1.0.0 — initial public source release
 
-This is the planned release note for the first **public source-code release** of SpinSpec. The version tag and GitHub Release will be published once a clean, public repository is available.
+This document describes the first public source-code release of SpinSpec, published as [v1.0.0](https://github.com/scleroze/SpinSpec/releases/tag/v1.0.0) and archived at [Zenodo](https://doi.org/10.5281/zenodo.23696822).
 
 ## Included functionality
 
@@ -30,6 +30,6 @@ The C core was regression-tested on two-spin and four-spin examples. The C docum
 - SpinSpec original source: GNU GPL version 3 or later (GPL-3.0-or-later); see [LICENSE](LICENSE).
 - Third-party components have their own licenses; see [THIRD_PARTY.md](THIRD_PARTY.md).
 - Please cite SpinSpec when it contributes to scientific calculations. Author information is recorded in [CITATION.cff](CITATION.cff).
-- A version-specific Zenodo DOI will be added after the public GitHub release is archived.
+- The version-specific Zenodo DOI is [10.5281/zenodo.23696822](https://doi.org/10.5281/zenodo.23696822).
 
 Project website: https://nmrspec.org
