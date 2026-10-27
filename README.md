@@ -8,6 +8,27 @@ Online project: https://nmrspec.org
 
 **Archived scientific release:** [SpinSpec v1.0.0](https://doi.org/10.5281/zenodo.23696822), DOI: [10.5281/zenodo.23696822](https://doi.org/10.5281/zenodo.23696822).
 
+## Getting started (Linux command line)
+
+**Online, without installation:** open [nmrspec.org](https://nmrspec.org), choose an example or enter spin parameters, and select **Calculate spectrum**. The browser interface runs calculations on the hosted server.
+
+**Run the C simulator locally** on Ubuntu or Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y git build-essential libgsl-dev gnuplot-nox
+git clone https://github.com/scleroze/SpinSpec.git
+cd SpinSpec/bin
+gcc -O2 -fopenmp engine_matrix.c -o engine_matrix -lgsl -lgslcblas -lm
+gcc -O2 matrix_graph.c GnuGraph.c -o matrix_graph -lm
+cp ../examples/two_spins.set .
+OMP_NUM_THREADS=1 ./engine_matrix two_spins.set
+```
+
+The final command runs the example directly from the terminal. Look in the `bin/` directory for `Sp_00000.dat` (transition list), `Res_*_00000.dat` (broadened spectra), and `data_00000.jpg` (plot). Both compiled executables, `engine_matrix` and `matrix_graph`, must remain in the same working directory. To reproduce the archived first release, check out tag `v1.0.0` before building.
+
+**Python is not needed for this command-line workflow**; it is used for the separate FastAPI web server. Native Windows build instructions are not provided; on Windows, a Linux environment such as WSL is an option.
+
 ## Physical model
 
 For `N` spin-1/2 nuclei, the complete product-basis Hamiltonian has dimension `2^N × 2^N` and includes Zeeman terms (with chemical shifts) and isotropic scalar `J` couplings. The engine diagonalizes the real symmetric matrix using GSL.
