@@ -1,0 +1,47 @@
+name: SpinSpec C engine smoke tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Install numerical and plotting dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgsl-dev gnuplot-nox
+
+      - name: Compile C engine and graphing module
+        run: |
+          set -euo pipefail
+          cd bin
+          gcc -O2 -fopenmp engine_matrix.c -o engine_matrix -lgsl -lgslcblas -lm
+          gcc -O2 matrix_graph.c GnuGraph.c -o matrix_graph -lm
+
+      - name: Run two-spin and phosphate examples
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in "two_spins.set" "Trimethyl_phosphate (one brench).set"; do
+            work="$(mktemp -d)"
+            cp bin/engine_matrix bin/matrix_graph "$work/"
+            cp "examples/$file" "$work/example.set"
+            (
+              cd "$work"
+              OMP_NUM_THREADS=1 ./engine_matrix example.set > run.log 2>&1
+              test -s Sp_00000.dat
+              test -s data_00000.jpg
+              compgen -G "Res_*_00000.dat" > /dev/null
+            )
+            echo "PASS: $file"
+          done
