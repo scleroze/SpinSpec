@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: >-
+  If you use SpinSpec to simulate or analyze NMR spectra in a scientific
+  publication, thesis, or presentation, please cite this software.
+type: software
+license: GPL-3.0-or-later
+title: "SpinSpec: Quantum simulation of NMR spectra"
+authors:
+  - family-names: Kupriyanov
+    given-names: Pavel
+    orcid: "https://orcid.org/0000-0002-6610-2785"
+abstract: >-
+  SpinSpec computes transition frequencies and relative spectral intensities
+  for coupled spin-1/2 nuclear magnetic resonance systems by constructing
+  and diagonalizing the spin Hamiltonian, with Zeeman and scalar J couplings.
+repository-code: "https://github.com/scleroze/SpinSpec"
+url: "https://nmrspec.org"
+keywords:
+  - nuclear magnetic resonance
+  - NMR simulation
+  - J coupling
+  - spin Hamiltonian
+  - Earth's magnetic field

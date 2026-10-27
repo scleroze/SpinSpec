@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+<meta charset="UTF-8">
+<title>Spectrum test</title>
+
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+<style>
+body{
+    margin:0;
+    padding:20px;
+    font-family:Arial;
+}
+
+#spectrum{
+    width:100%;
+    height:90vh;
+    border:1px solid #888;
+}
+
+button{
+    margin-right:6px;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Interactive spectrum</h2>
+
+<label>
+  Line width, Hz:
+  <input id="lineWidthInput" type="number" value="0.05" step="0.01" min="0.001">
+</label>
+
+<label>
+  Cluster gap, Hz:
+  <input id="clusterGapInput" type="number" value="500" step="10" min="1">
+</label>
+
+<button id="redrawButton">Redraw</button>
+
+<div id="clusterButtons" style="margin: 10px 0;"></div>
+<div id="spectrum"></div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const jobId = params.get("job");
+
+const lineWidthFromUrl = params.get("linewidth");
+
+if (lineWidthFromUrl) {
+    document.getElementById("lineWidthInput").value = lineWidthFromUrl;
+}
+
+const windowHalf = 20;
+const pointsPerWindow = 2000;
+
+function getClusterGap() {
+    const value = parseFloat(document.getElementById("clusterGapInput").value);
+    if (!isFinite(value) || value <= 0) return 500;
+    return value;
+}
+
+let cachedLines = [];
+
+function getLineWidth() {
+    const value = parseFloat(document.getElementById("lineWidthInput").value);
+    if (!isFinite(value) || value <= 0) return 0.05;
+    return value;
+}
+
+function drawSpectrum(lines) {
+    const width = getLineWidth();
+    const clusterGap = getClusterGap();
+    const oldLayout = document.getElementById("spectrum").layout;
+    const oldXRange = oldLayout && oldLayout.xaxis ? oldLayout.xaxis.range : null;
+    const oldYRange = oldLayout && oldLayout.yaxis ? oldLayout.yaxis.range : null;
+
+    const nonzero = lines
+        .filter(p => Math.abs(p.amp) > 1e-12)
+        .sort((a, b) => a.freq - b.freq);
+
+    const clusters = [];
+
+    for (const p of nonzero) {
+        const lastCluster = clusters[clusters.length - 1];
+
+        if (!lastCluster || p.freq - lastCluster[lastCluster.length - 1].freq > clusterGap) {
+            clusters.push([p]);
+        } else {
+            lastCluster.push(p);
+        }
+    }
+
+    const traces = [];
+    const ranges = [];
+
+    for (let c = 0; c < clusters.length; c++) {
+        const group = clusters[c];
+
+        const rawMin = Math.min(...group.map(p => p.freq));
+        const rawMax = Math.max(...group.map(p => p.freq));
+        const fmin = rawMin - windowHalf;
+        const fmax = rawMax + windowHalf;
+
+        const x = [];
+        const y = [];
+
+        for (let i = 0; i < pointsPerWindow; i++) {
+            const xx = fmin + (fmax - fmin) * i / (pointsPerWindow - 1);
+            let yy = 0;
+
+            for (const p of group) {
+                const gamma = width / 2.0;
+                yy += p.amp / (1 + Math.pow((xx - p.freq) / gamma, 2));
+            }
+
+            x.push(xx);
+            y.push(yy);
+        }
+
+        const ymax = Math.max(...y);
+
+        ranges.push({
+            min: fmin,
+            max: fmax,
+            center: (rawMin + rawMax) / 2,
+            ymax: ymax
+        });
+
+        traces.push({
+            x: x,
+            y: y,
+            mode: "lines",
+            type: "scatter",
+            name: `Group ${c + 1}: ${ranges[c].center.toFixed(2)} Hz`,
+            line: { width: 2 }
+        });
+    }
+
+    const layout = {
+    title: `NMR spectrum, line width = ${width} Hz`,
+    xaxis: { title: "Frequency (Hz)" },
+    yaxis: { title: "Amplitude" },
+    dragmode: "pan"
+};
+
+if (oldXRange) {
+    layout.xaxis.range = oldXRange;
+}
+
+if (oldYRange) {
+    layout.yaxis.range = oldYRange;
+}
+
+Plotly.react(
+    "spectrum",
+    traces,
+    layout,
+    {
+        scrollZoom: true,
+        responsive: true
+    }
+);
+
+    const buttons = document.getElementById("clusterButtons");
+    buttons.innerHTML = "";
+
+    const fullButton = document.createElement("button");
+    fullButton.textContent = "Full spectrum";
+    fullButton.onclick = () => {
+        Plotly.relayout("spectrum", {
+            "xaxis.autorange": true,
+            "yaxis.autorange": true
+        });
+    };
+    buttons.appendChild(fullButton);
+
+    ranges.forEach((r, i) => {
+        const button = document.createElement("button");
+        button.textContent = `Group ${i + 1}: ${r.center.toFixed(2)} Hz`;
+
+        button.onclick = () => {
+            Plotly.relayout("spectrum", {
+                "xaxis.range": [r.min, r.max],
+                "yaxis.range": [0, r.ymax * 1.15]
+            });
+        };
+
+        buttons.appendChild(button);
+    });
+}
+
+document.getElementById("redrawButton").onclick = () => {
+    drawSpectrum(cachedLines);
+};
+
+fetch(`/api/job/${jobId}/spectrum-lines`)
+.then(r => r.json())
+.then(lines => {
+    cachedLines = lines;
+    drawSpectrum(lines);
+});
+</script>
+
+</body>
+</html>

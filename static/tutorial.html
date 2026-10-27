@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="canonical" href="https://nmrspec.org/tutorial" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SpinSpec Web Tutorial</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #102033;
+      --muted: #5f6f82;
+      --line: #d7e0ea;
+      --accent: #0b72e7;
+      --accent-soft: #e8f2ff;
+      --code: #f1f4f8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.55;
+    }
+    header {
+      background: linear-gradient(135deg, #102033 0%, #164a7d 100%);
+      color: white;
+      padding: 56px 24px;
+    }
+    header .wrap, main { max-width: 1080px; margin: 0 auto; }
+    h1 { font-size: 42px; margin: 0 0 10px; letter-spacing: -0.03em; }
+    .subtitle { font-size: 18px; opacity: 0.88; max-width: 760px; }
+    main { padding: 28px 20px 56px; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 26px;
+      margin: 18px 0;
+      box-shadow: 0 8px 28px rgba(16, 32, 51, 0.06);
+    }
+    h2 { font-size: 28px; margin: 0 0 14px; letter-spacing: -0.02em; }
+    h3 { font-size: 20px; margin: 24px 0 8px; }
+    p { margin: 10px 0; }
+    .note {
+      border-left: 4px solid var(--accent);
+      background: var(--accent-soft);
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin: 16px 0;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .field {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      background: #fbfdff;
+    }
+    .field b { display: block; margin-bottom: 6px; }
+    code, pre {
+      background: var(--code);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    code { padding: 2px 5px; }
+    pre { padding: 14px; overflow-x: auto; }
+    ol, ul { padding-left: 24px; }
+    figure {
+      margin: 18px 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      background: #fff;
+    }
+    figure img {
+      width: 100%;
+      display: block;
+      background: white;
+    }
+    figcaption {
+      padding: 10px 14px;
+      color: var(--muted);
+      font-size: 14px;
+      border-top: 1px solid var(--line);
+    }
+    .step {
+      counter-increment: step;
+      position: relative;
+      padding-left: 52px;
+      margin: 22px 0;
+    }
+    .step::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+    }
+    .steps { counter-reset: step; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 15px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f1f6fc; }
+    footer {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 20px 40px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>SpinSpec Web Tutorial</h1>
+    <div class="subtitle">A short guide to entering spin-system parameters and calculating Hamiltonian-based NMR spectra in the SpinSpec web interface.</div>
+  </div>
+</header>
+
+<main>
+  <section>
+    <h2>1. What SpinSpec does</h2>
+    <p><b>SpinSpec</b> calculates NMR spectra from a spin Hamiltonian. The input describes a set of spin-1/2 nuclei, their gyromagnetic ratios, chemical shifts, external magnetic field, and scalar J-couplings. After calculation, the program builds spectra for selected observed spins.</p>
+    <div class="note">
+      The current input convention uses spin numbers starting from <b>0</b>. For example, in a six-spin system the spins are numbered <code>0 1 2 3 4 5</code>.
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Starting from an example</h2>
+    <p>The easiest way to begin is to choose one of the prepared examples from the <b>Examples</b> list.</p>
+    <figure>
+      <img src="/static/1_1.png" alt="SpinSpec example selector">
+      <figcaption>Open the Examples drop-down list and select a predefined spin system.</figcaption>
+    </figure>
+    <p>After selection, SpinSpec fills the input fields automatically. You can then edit any parameter manually.</p>
+    <figure>
+      <img src="/static/1_2.png" alt="Loaded SpinSpec example">
+      <figcaption>Example loaded: title and parameter fields are filled.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>3. Input fields</h2>
+    <div class="grid">
+      <div class="field">
+        <b>Title</b>
+        <p>A short name for the calculation. It is stored in the <code>.set</code> file. The title may start with <code>#</code>.</p>
+      </div>
+      <div class="field">
+        <b>Gyromagnetic ratios (MHz/T)</b>
+        <p>One number for each spin. The number of values defines the number of spins in the system.</p>
+      </div>
+      <div class="field">
+        <b>Chemical shifts (ppm)</b>
+        <p>One chemical shift value for each spin, in the same order as the gyromagnetic ratios.</p>
+      </div>
+      <div class="field">
+        <b>External field (mT)</b>
+        <p>The static magnetic field used in the Hamiltonian calculation. Enter a single value for one spectrum.</p>
+      </div>
+      <div class="field">
+        <b>J-couplings</b>
+        <p>Each line has the format <code>spin_i spin_j J</code>, where <code>J</code> is given in Hz.</p>
+      </div>
+      <div class="field">
+        <b>Displayed spin numbers</b>
+        <p>Spin indices for which spectra should be plotted.</p>
+      </div>
+      <div class="field">
+        <b>Graph heights</b>
+        <p>Vertical scale for each displayed spectrum. The number of values should match the number of displayed spins.</p>
+      </div>
+      <div class="field">
+        <b>Line width and spectrum width (Hz)</b>
+        <p>The first number is the Lorentzian line-width parameter. The second number is the displayed spectral window half-width in Hz.</p>
+      </div>
+    </div>
+  </section>
+  <section>
+    <h2>4. Gyromagnetic ratios</h2>
+    <p>Enter gyromagnetic ratios in <b>MHz/T</b>, separated by spaces. For convenience, the expandable isotope list gives typical values.</p>
+    <figure>
+      <img src="/static/1_3.png" alt="Isotope gyromagnetic ratios">
+      <figcaption>The isotope list can be used as a reference for common nuclei.</figcaption>
+    </figure>
+    <p>When you click a gyromagnetic-ratio value in the isotope list, the value is automatically copied to the clipboard. You can then paste it into the required position in the <b>Gyromagnetic ratios</b> input field.</p>
+    <p>For example, a system with five protons and one phosphorus nucleus may be entered as:</p>
+    <pre><code>42.578 42.578 42.578 42.578 42.578 17.24</code></pre>
+  </section>
+
+  <section>
+    <h2>6. Where to find chemical shifts and J-couplings</h2>
+    <p>Chemical shifts and scalar J-coupling constants can be taken from experimental NMR databases, spectral tables, or original literature. Always check the solvent, reference compound, temperature, and nucleus, because these parameters may affect the reported values.</p>
+    <div class="grid">
+      <div class="field">
+        <b>Organic Chemistry Data / Hans Reich NMR tables</b>
+        <p>Practical tables for common <sup>1</sup>H, <sup>13</sup>C, <sup>19</sup>F, and <sup>31</sup>P chemical shifts and J-coupling ranges.</p>
+        <p><a href="https://organicchemistrydata.org/hansreich/resources/nmr/" target="_blank" rel="noopener">organicchemistrydata.org</a></p>
+      </div>
+      <div class="field">
+        <b>SDBS, AIST</b>
+        <p>Free spectral database for organic compounds, including <sup>1</sup>H-NMR and <sup>13</sup>C-NMR spectra for many molecules.</p>
+        <p><a href="https://sdbs.db.aist.go.jp/" target="_blank" rel="noopener">sdbs.db.aist.go.jp</a></p>
+      </div>
+      <div class="field">
+        <b>nmrshiftdb2</b>
+        <p>Open NMR database with assigned spectra, peak lists, and prediction tools for organic structures.</p>
+        <p><a href="https://nmrshiftdb.nmr.uni-koeln.de/" target="_blank" rel="noopener">nmrshiftdb.nmr.uni-koeln.de</a></p>
+      </div>
+      <div class="field">
+        <b>NIST Chemistry WebBook</b>
+        <p>Reference chemical database from NIST. It is useful for identifying compounds and checking available physical and spectral data.</p>
+        <p><a href="https://webbook.nist.gov/chemistry/" target="_blank" rel="noopener">webbook.nist.gov</a></p>
+      </div>
+      <div class="field">
+        <b>Original articles and handbooks</b>
+        <p>For specialized nuclei such as <sup>31</sup>P, or for low-field and zero-field simulations, original papers and dedicated NMR handbooks are often the most reliable source of J-couplings.</p>
+      </div>
+    </div>
+    <div class="note">
+      Use experimental values when possible. Predicted values are useful for a first test, but they should be marked as estimates.
+    </div>
+  </section>
+
+  <section>
+    <h2>6. Chemical shifts and magnetic field</h2>
+    <p>Chemical shifts are entered in ppm, one value per spin. The order must exactly match the order of gyromagnetic ratios.</p>
+    <figure>
+      <img src="/static/1_4.png" alt="Chemical shifts and field input">
+      <figcaption>Example: five proton shifts and one phosphorus shift.</figcaption>
+    </figure>
+    <p>The external field is entered in mT. For example:</p>
+    <pre><code>500</code></pre>
+    <figure>
+      <img src="/static/1_5.png" alt="External magnetic field">
+      <figcaption>External field set to 500 mT.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>7. J-couplings</h2>
+    <p>The <b>J-couplings</b> field describes scalar spin-spin interactions. Each line contains two spin indices and the coupling constant in Hz:</p>
+    <pre><code>0 3 7.1
+1 3 7.1
+2 3 7.1
+0 5 0.9
+1 5 0.9
+2 5 0.9
+3 5 8
+4 5 8</code></pre>
+    <figure>
+      <img src="/static/1_6.png" alt="J-coupling input">
+      <figcaption>J-coupling values are entered line by line.</figcaption>
+    </figure>
+    <div class="note">
+      Only one direction is required. For example, write <code>0 5 0.9</code>; the program treats the coupling as symmetric.
+    </div>
+  </section>
+
+  <section>
+    <h2>8. Selecting displayed spectra</h2>
+    <p>Use <b>Displayed spin numbers</b> to choose which nuclei should be shown in the final plot.</p>
+    <figure>
+      <img src="/static/1_7.png" alt="Displayed spin numbers">
+      <figcaption>Here the spectra for spins 0, 3, and 5 will be displayed.</figcaption>
+    </figure>
+    <p>The <b>Graph heights</b> field controls the vertical scale of each plotted spectrum. The order follows the displayed spin numbers.</p>
+    <figure>
+      <img src="/static/1_8.png" alt="Graph heights">
+      <figcaption>Three graph-height values for three displayed spins.</figcaption>
+    </figure>
+  </section>
+
+  <section>
+    <h2>9. Line width, spectral window, and calculation</h2>
+    <p>The final field contains two numbers:</p>
+    <table>
+      <thead><tr><th>Value</th><th>Meaning</th><th>Example</th></tr></thead>
+      <tbody>
+        <tr><td>Line width</td><td>Lorentzian line-width parameter used to draw peaks.</td><td><code>0.05</code></td></tr>
+        <tr><td>Spectrum width</td><td>Half-width of the displayed spectrum around the central NMR frequency.</td><td><code>20</code></td></tr>
+      </tbody>
+    </table>
+    <figure>
+      <img src="/static/1_9.png" alt="Line width and calculate spectrum">
+      <figcaption>After checking the parameters, press Calculate spectrum.</figcaption>
+    </figure>
+    <p>Press <b>Save set</b> to store the current input, <b>Open set</b> to load an existing file, or <b>Calculate spectrum</b> to run the Hamiltonian calculation and generate the plotted spectra.</p>
+  </section>
+
+  <section>
+    <h2>10. Example input: tri-propyl phosphate</h2>
+    <p>The screenshots above show a six-spin reduced model for tri-propyl phosphate. The input can be represented in a <code>.set</code>-style form as:</p>
+    <pre><code># TriPropylPhosphate
+42.578 42.578 42.578 42.578 42.578 17.24
+1.349 1.349 1.349 4.111 4.111 0
+500
+0 3 7.1
+1 3 7.1
+2 3 7.1
+0 4 7.1
+1 4 7.1
+2 4 7.1
+0 5 0.9
+1 5 0.9
+2 5 0.9
+3 5 8
+4 5 8
+
+Graph 0 3 5
+30 15 7
+0.05 20</code></pre>
+  </section>
+
+  <section>
+    <h2>11. Common checks</h2>
+    <ul>
+      <li>The number of gyromagnetic ratios must equal the number of chemical shifts.</li>
+      <li>Spin indices in J-couplings must refer to existing spins.</li>
+      <li>The number of graph-height values should match the number of displayed spin numbers.</li>
+      <li>Use spaces between numbers. Avoid commas as decimal separators.</li>
+      <li>Use Hz for J-couplings and mT for the magnetic field.</li>
+    </ul>
+  </section>
+
+  <section>
+  <h2>Interactive mode</h2>
+
+  <p>
+    After a spectrum has been calculated, the standard preview image is shown in the main window.
+    To inspect the spectrum in more detail, click the <b>Interactive mode</b> button above the preview.
+    The interactive spectrum opens in a new browser tab.
+  </p>
+  <figure>
+      <img src="/static/1_10.png" alt="Interactive mode">
+      <figcaption>Interactive mode allows detailed inspection of the calculated spectrum.</figcaption>
+  </figure>
+
+  <p>
+    In interactive mode, the spectrum can be moved and zoomed with the mouse. Use the mouse wheel
+    to zoom, drag the plot to pan, or use the Plotly toolbar in the upper-right corner of the graph.
+  </p>
+
+  <p>
+    Spectral lines are automatically grouped into frequency regions. The buttons above the graph,
+    such as <b>Full spectrum</b> and <b>Group 1</b>, allow quick navigation between groups of lines.
+    When a group is selected, the graph is automatically zoomed to the corresponding frequency range.
+  </p>
+  <figure>
+      <img src="/static/1_11.png" alt="Interactive mode">
+      <figcaption>Interactive mode allows detailed inspection of the calculated spectrum.</figcaption>
+  </figure>
+
+  <p>
+    The <b>Line width</b> field controls the Lorentzian line-width parameter used only for interactive
+    visualization. Changing this value and pressing <b>Redraw</b> recalculates the displayed line shapes
+    without repeating the Hamiltonian calculation.
+  </p>
+
+  <div class="note">
+    Interactive mode uses the calculated line frequencies and amplitudes from the spectrum data file.
+    It is intended for convenient inspection of peaks, multiplets, and closely spaced spectral features.
+  </div>
+</section>
+</main>
+
+<footer>
+  SpinSpec tutorial page. Prepared for the web version of the Hamiltonian-based NMR spectrum modeling interface.
+</footer>
+</body>
+</html>

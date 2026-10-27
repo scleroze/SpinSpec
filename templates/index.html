@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <link rel="canonical" href="https://nmrspec.org/" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NMR Spectrum Simulator Online | SpinSpec</title>
+  <meta name="description" content="Interactive online NMR spectrum simulator with J-coupling, spin Hamiltonian diagonalization, and visualization from high-field to low-field NMR conditions."> 
+  <meta name="keywords" content="NMR spectrum online, NMR simulator, NMR spectrum simulation, J-coupling, spin Hamiltonian, low-field NMR, Earth-field NMR, spectroscopy">
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --border: #d8dee6;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --danger: #b91c1c;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      --radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .page {
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      gap: 20px;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .left-panel {
+      padding: 20px;
+      align-self: start;
+    }
+
+    .right-panel {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100vh - 40px);
+    }
+
+    .lead {
+      font-size: 12px;
+      line-height: 1.4;
+      color: #475569;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 24px;
+    }
+
+    .subtitle {
+      margin: -8px 0 20px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .placeholder {
+      max-width: 760px;
+      margin: 0 auto;
+      text-align: justify;
+      line-height: 1.55;
+    }
+
+    .placeholder h2,
+    .placeholder h3 {
+      text-align: center;
+    }
+
+    .placeholder textarea {
+      width: 100%;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: 2px solid rgba(37, 99, 235, 0.15);
+      border-color: var(--accent);
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+      line-height: 1.35;
+    }
+
+    .button-row,
+    .button-row-bottom {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    button,
+    .file-label {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    button.primary:hover {
+      background: var(--accent-hover);
+    }
+
+    button.secondary,
+    .file-label {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    button.secondary:hover,
+    .file-label:hover {
+      background: #d1d5db;
+    }
+
+    button:disabled {
+      background: #cbd5e1;
+      color: #64748b;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 14px;
+      min-height: 22px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .status.error {
+      color: var(--danger);
+    }
+
+    .status.ok {
+      color: #166534;
+    }
+
+    .preview-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .preview-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .preview-box {
+      flex: 1;
+      min-height: 720px;
+      border: 1px dashed var(--border);
+      border-radius: 12px;
+      background: #fafafa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .preview-box img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+
+    .meta {
+      margin-top: 12px;
+      font-size: 13px;
+      color: var(--muted);
+      word-break: break-word;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .result-message {
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+
+    .info-spoiler summary {
+      cursor: pointer;
+      font-size: 13px;
+      color: #666;
+    }
+
+    @media (max-width: 1100px) {
+      .page {
+        grid-template-columns: 1fr;
+      }
+
+      .right-panel {
+        min-height: auto;
+      }
+
+      .preview-box {
+        min-height: 1020px;
+      }
+    }
+
+    .gamma-help {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.gamma-help summary {
+  cursor: pointer;
+  color: #666;
+}
+
+.gamma-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gamma-item {
+  text-align: left;
+  border: 1px solid #ddd;
+  background: #fff;
+  padding: 4px 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.gamma-item:hover {
+  background: #f5f5f5;
+}
+
+.gamma-copy-status {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #2d6a4f;
+  min-height: 14px;
+}
+
+.check-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+
+  width: fit-content;
+  white-space: nowrap;
+
+  font-size: 13px;
+  color: #475569;
+}
+
+.preview-toolbar {
+  display: block;
+  width: 100%;
+  margin: 8px 0 12px 0;
+  text-align: center;
+}
+
+#interactiveButton {
+  padding: 8px 12px;
+  font-weight: 600;
+}
+
+.preview-box {
+  flex-direction: column;
+  align-items: stretch;
+}
+</style>
+</head>
+<body>
+  <div class="page">
+    <section class="panel left-panel">
+      <h1>SpinSpec</h1>
+      <p class="subtitle">Hamiltonian-based NMR spectrum modeling</p>
+      
+      <form id="nmrForm" class="form-grid">
+        <div class="field">
+          <label for="exampleSelect">Examples</label>
+          <select id="exampleSelect" name="exampleSelect">
+            <option value="">Choose an example...</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="title">Title</label>
+          <input id="title" name="title" type="text" placeholder="For example: Trimethyl phosphate" />
+        </div>
+
+        <div class="field">
+          <label for="gammas">Gyromagnetic ratios (MHz/T)</label>
+          <input id="gammas" name="gammas" type="text" placeholder="For example: 42.578 17.235" />
+
+          <details class="gamma-help">
+            <summary>Isotope γ values</summary>
+            <div class="gamma-list">
+              <button type="button" class="gamma-item" data-copy="42.577">¹H — 42.577 MHz/T</button>
+              <button type="button" class="gamma-item" data-copy="10.708">¹³C — 10.708 MHz/T</button>
+              <button type="button" class="gamma-item" data-copy="-4.316">¹⁵N — -4.316 MHz/T</button>
+              <button type="button" class="gamma-item" data-copy="40.053">¹⁹F — 40.053 MHz/T</button>
+              <button type="button" class="gamma-item" data-copy="-8.465">²⁹Si — -8.465 MHz/T</button>
+              <button type="button" class="gamma-item" data-copy="17.235">³¹P — 17.235 MHz/T</button>
+            </div>
+            <div id="gammaCopyStatus" class="gamma-copy-status"></div>
+          </details>
+        </div>
+
+        <div class="field">
+          <label for="shifts">Chemical shifts (ppm)</label>
+          <input id="shifts" name="shifts" type="text" placeholder="For example: 0 0 0 0" />
+        </div>
+
+        <div class="field">
+          <label for="field">External field</label>
+          <input id="field" name="field" type="text" placeholder="For example: 50" />
+          <label class="check-row">
+            <input type="checkbox" id="fieldAsProtonFrequency">
+            enter as ¹H frequency (MHz)
+          </label>
+
+          <div id="fieldHint" class="hint">
+            Default: magnetic field in mT
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="jcouplings">J-couplings</label>
+          <textarea id="jcouplings" name="jcouplings" placeholder="For example:
+0 1 10.2
+0 2 10.2
+0 3 10.2"></textarea>
+        </div>
+
+        <div class="field">
+          <label for="graph">Displayed spin numbers</label>
+          <input id="graph" name="graph" type="text" placeholder="For example: 0 3 5" />
+        </div>
+
+        <div class="field">
+          <label for="heights">Graph heights</label>
+          <input id="heights" name="heights" type="text" placeholder="For example: 1.0" />
+        </div>
+
+        <div class="field">
+          <label for="linewidths">line width and spectrum width (Hz)</label>
+          <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
+        </div>
+
+        <div class="button-row">
+          <button type="button" class="secondary" id="saveSetBtn">Save set</button>
+          <label class="file-label" for="openSetInput">Open set</label>
+          <input class="hidden" id="openSetInput" type="file" accept=".set,text/plain" />
+        </div>
+
+        <div class="button-row-bottom">
+          <button type="button" class="primary" id="calculateBtn">Calculate spectrum</button>
+          <button type="button" class="secondary" id="showInfoBtn">Feedback</button>
+        </div>
+      </form>
+
+      <div id="status" class="status">Form is ready.</div>
+      <p class="lead">
+        A web interface for preparing .set files, exploring examples, and running NMR spectrum calculations.
+     </p> 
+    </section>
+
+    <section class="panel right-panel">
+      <div class="preview-toolbar">
+        <div class="preview-title">Spectrum preview</div>
+      </div>
+   
+
+<div class="preview-box">
+  <div id="resultMessage" class="result-message"></div>
+
+  <div class="preview-toolbar">
+    <button type="button" id="interactiveButton" style="display:none;">
+      Interactive mode
+    </button>
+  </div>
+
+  <img id="previewImage" alt="Spectrum preview" />
+
+  <div id="placeholder" class="placeholder">
+
+    <h2>Online NMR Spectrum Simulation</h2>
+
+      <p>
+        SpinSpec is an online NMR spectrum simulator for interactive visualization 
+        of J-coupled spin systems. The platform can be used for high-field NMR, low-field NMR, 
+        Earth-field NMR, and educational exploration of spin Hamiltonians.
+      </p>
+
+      <h3>Features</h3>
+
+      <p>
+        • High-resolution J-coupled spectrum simulation<br>
+        • Arbitrary magnetic field values from high-field to low-field regimes<br>
+        • Interactive visualization of spin groups<br>
+        • Ready-to-use molecular examples<br>
+        • Support for custom spin systems and .set files
+      </p>
+
+      <h3>Quick start</h3>
+
+      <p>
+        Choose one of the prepared examples or enter your own spin-system parameters:
+        gyromagnetic ratios, chemical shifts, J-coupling constants, and magnetic field.
+        Spin numbering starts from zero.
+      </p>
+
+      <p>
+        <a href="https://nmrspec.org/tutorial" target="_blank">Tutorial page</a>, <a href="https://youtu.be/JQFtuEWrhkE?si=jWJoGrVBAAB_gP4v" target="_blank">Tutorial videos</a> and example datasets are available to help new users quickly
+        understand the interface and reproduce experimental spectra.
+      </p>
+
+      <h3>Model validation</h3>
+
+      <p>
+        The current implementation reproduces experimental high-field spectra well
+        and shows qualitatively correct spectral evolution toward Earth-field conditions.
+        Zero-field spectra may require additional validation and density-matrix-based
+        treatment of transition amplitudes.
+      </p>
+
+      <p>
+        The project is developed with participation of researchers affiliated with
+        Gebze Technical University (Turkey) and Saint Petersburg State University (Russia).
+      </p>
+
+      <p>
+        Feedback and suggestions are welcome. Please cite the source if you use the results.
+      </p>
+
+      <div class="feedback-box">
+        <textarea id="feedbackText" placeholder="Your message..."></textarea>
+        <button type="button" id="sendFeedbackBtn">Send feedback</button>
+        <div id="feedbackStatus"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+      <div id="meta" class="meta">Current file: not selected.</div>
+    </section>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const metaEl = document.getElementById('meta');
+    const openSetInput = document.getElementById('openSetInput');
+    const saveSetBtn = document.getElementById('saveSetBtn');
+    const calculateBtn = document.getElementById('calculateBtn');
+    const previewImage = document.getElementById('previewImage');
+    const placeholder = document.getElementById('placeholder');
+    const exampleSelect = document.getElementById('exampleSelect');
+
+    let currentFileName = null;
+    
+    function updateInteractiveButton(result) {
+      const interactiveButton = document.getElementById("interactiveButton");
+
+      if (!result || !result.job_id || !result.spectrum_url) {
+        interactiveButton.style.display = "none";
+        interactiveButton.onclick = null;
+        return;
+      }
+
+      interactiveButton.style.display = "inline-block";
+      interactiveButton.onclick = () => {
+        const linewidths = document.getElementById("linewidths").value.trim();
+        const lineWidth = linewidths.split(/\s+/)[0] || "0.05";
+
+        window.open(
+          `/dev-spectrum?job=${result.job_id}&linewidth=${encodeURIComponent(lineWidth)}`,
+          "_blank"
+        );
+      };
+    }
+    
+    function insertTokenAtCursor(input, token) {
+      input.focus();
+
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+
+      const before = input.value.slice(0, start);
+      const after = input.value.slice(end);
+
+      let newBefore = before;
+
+      if (newBefore.length > 0 && !/\s$/.test(newBefore)) {
+        newBefore += " ";
+      }
+
+      let newAfter = after;
+
+      if (newAfter.length > 0 && !/^\s/.test(newAfter)) {
+        newAfter = " " + newAfter;
+      }
+
+      input.value = (newBefore + token + newAfter)
+        .replace(/\s+/g, " ")
+        .trim();
+
+      const newPos = (newBefore + token).length;
+      input.setSelectionRange(newPos, newPos);
+
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    function setStatus(message, type = '') {
+      statusEl.textContent = message;
+      statusEl.className = `status ${type}`.trim();
+    }
+
+    function showMessage(text, isError = false) {
+      const el = document.getElementById("resultMessage");
+      el.innerText = text;
+      el.style.color = isError ? "red" : "black";
+    }
+
+    function getFormData() {
+      return {
+        title: document.getElementById('title').value.trim(),
+        gammas: document.getElementById('gammas').value.trim(),
+        shifts: document.getElementById('shifts').value.trim(),
+        field: getFieldValueForCalculation(),
+        jcouplings: document.getElementById('jcouplings').value.replace(/\r/g, '').trim(),
+        graph: document.getElementById('graph').value.trim(),
+        heights: document.getElementById('heights').value.trim(),
+        linewidths: document.getElementById('linewidths').value.trim(),
+      };
+    }
+
+    function buildSetContent() {
+      const data = getFormData();
+      const titleLine = data.title.startsWith('#') ? data.title : `# ${data.title}`;
+
+      return [
+        titleLine,
+        data.gammas,
+        data.shifts,
+        data.field,
+        data.jcouplings,
+        '',
+        `Graph ${data.graph}`,
+        data.heights,
+        data.linewidths,
+        ''
+      ].join('\n');
+    }
+    
+    function getFieldValueForCalculation() {
+      const raw = document.getElementById("field").value.trim();
+      const asFreq = document.getElementById("fieldAsProtonFrequency").checked;
+
+      if (!asFreq) return raw;
+
+      const nuMHz = parseFloat(raw.replace(",", "."));
+      const gammaH = 42.57747892; // MHz/T
+      const field_mT = (nuMHz / gammaH) * 1000.0;
+
+      return String(field_mT);
+    }
+
+    function fillFormFromSet(content) {
+      const lines = content.replace(/\r/g, '').split('\n');
+
+      if (lines.length < 7) {
+        throw new Error('The .set file is too short or has an invalid format.');
+      }
+
+      document.getElementById('title').value = lines[0] ?? '';
+      document.getElementById('gammas').value = lines[1] ?? '';
+      document.getElementById('shifts').value = lines[2] ?? '';
+      document.getElementById('field').value = lines[3] ?? '';
+
+      let i = 4;
+      const jLines = [];
+      while (i < lines.length && !lines[i].startsWith('Graph')) {
+        if (lines[i] !== '') jLines.push(lines[i]);
+        i += 1;
+      }
+
+      document.getElementById('jcouplings').value = jLines.join('\n');
+
+      if (i < lines.length) {
+        document.getElementById('graph').value = (lines[i] || '').replace(/^Graph\s+/, '');
+        document.getElementById('heights').value = lines[i + 1] ?? '';
+        document.getElementById('linewidths').value = lines[i + 2] ?? '';
+      }
+    }
+
+    function downloadSetFile() {
+      const content = buildSetContent();
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeName = currentFileName || 'spectrum.set';
+      a.href = url;
+      a.download = safeName.endsWith('.set') ? safeName : `${safeName}.set`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setStatus('File .set saved locally.', 'ok');
+    }
+
+    const showInfoBtn = document.getElementById('showInfoBtn');
+
+    showInfoBtn.addEventListener('click', () => {
+      previewImage.style.display = 'none';
+      previewImage.removeAttribute('src');
+      placeholder.style.display = 'block';
+      showMessage('');
+      metaEl.textContent = `Current file: ${currentFileName || 'not selected'}.`;
+    });
+
+    async function sendRequest(endpoint) {
+      const payload = getFormData();
+      setStatus('Sending request to server...', '');
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+
+      return response.json();
+    }
+
+    function updatePreview(imageUrl, fileLabel = null) {
+      previewImage.src = imageUrl;
+      previewImage.style.display = 'block';
+      placeholder.style.display = "none";
+      placeholder.style.display = 'none';
+      metaEl.textContent = fileLabel
+        ? `Current file: ${fileLabel}`
+        : `The current file: ${currentFileName || 'is not selected'}.`;
+    }
+
+    async function loadExamples() {
+      try {
+        const response = await fetch('/api/examples');
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        for (const example of data.examples || []) {
+          const option = document.createElement('option');
+          option.value = example.filename;
+          option.textContent = example.label;
+          exampleSelect.appendChild(option);
+        }
+      } catch (error) {
+        setStatus(`Failed to load example list: ${error.message}`, 'error');
+      }
+    }
+
+    async function loadExampleAndCalculate(filename) {
+      if (!filename) return;
+
+      try {
+        setStatus('Loading example...', '');
+
+        const response = await fetch(`/api/examples/${encodeURIComponent(filename)}`);
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        fillFormFromSet(data.content);
+        currentFileName = data.filename;
+        metaEl.textContent = `Current file: ${currentFileName}`;
+        setStatus(`Example ${data.filename} loaded. Starting calculation...`, '');
+
+        const result = await sendRequest('/api/calculate');
+
+        if (result.image_url) {
+          updatePreview(result.image_url, data.filename);
+        }
+
+        updateInteractiveButton(result);
+
+        setStatus(result.message || 'Calculation completed.', 'ok');
+      } catch (error) {
+        setStatus(`Error loading example: ${error.message}`, 'error');
+      }
+    }
+
+    exampleSelect.addEventListener('change', async (event) => {
+      await loadExampleAndCalculate(event.target.value);
+    });
+
+    openSetInput.addEventListener('change', async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const text = await file.text();
+        fillFormFromSet(text);
+        currentFileName = file.name;
+        metaEl.textContent = `Current file: ${currentFileName}`;
+        setStatus(`File downloaded: ${file.name}.`, 'ok');
+      } catch (error) {
+        setStatus(error.message, 'error');
+      }
+    });
+
+    saveSetBtn.addEventListener('click', downloadSetFile);
+
+    calculateBtn.addEventListener('click', async () => {
+      try {
+        const result = await sendRequest('/api/calculate');
+
+        if (result.image_url) {
+          updatePreview(result.image_url, result.set_filename || currentFileName);
+        }
+
+        updateInteractiveButton(result);
+
+        setStatus(result.message || 'Calculation completed.', 'ok');
+      } catch (error) {
+        setStatus(`Error calculating spectrum: ${error.message}`, 'error');
+      }
+    });
+    
+    document.querySelectorAll(".gamma-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const value = btn.dataset.copy;
+        const status = document.getElementById("gammaCopyStatus");
+        const gammasInput = document.getElementById("gammas");
+
+        insertTokenAtCursor(gammasInput, value);
+
+        status.textContent = `Inserted: ${value}`;
+        setTimeout(() => status.textContent = "", 1000);
+      });
+    });
+
+    document.getElementById("sendFeedbackBtn").addEventListener("click", async () => {
+        const text = document.getElementById("feedbackText").value.trim();
+        const status = document.getElementById("feedbackStatus");
+
+        if (!text) {
+          status.textContent = "Message is empty";
+          return;
+        }
+
+        try {
+          await fetch("/api/feedback", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ message: text })
+          });
+
+          status.textContent = "Sent";
+          document.getElementById("feedbackText").value = "";
+        } catch {
+          status.textContent = "Error sending message";
+        }
+    });
+
+    loadExamples();
+  </script>
+</body>
+</html>
