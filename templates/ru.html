@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Моделирование спектров ЯМР онлайн — SpinSpec | J-связь и гамильтониан</title>
+  <meta name="description" content="SpinSpec — бесплатный онлайн-симулятор ЯМР-спектров для студентов и исследователей. Рассчитывайте частоты переходов и относительные интенсивности линий, исследуйте J-связь и влияние магнитного поля. Открытый код GPLv3.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nmrspec.org/ru">
+  <link rel="alternate" hreflang="ru" href="https://nmrspec.org/ru">
+  <link rel="alternate" hreflang="en" href="https://nmrspec.org/">
+  <link rel="alternate" hreflang="x-default" href="https://nmrspec.org/">
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="SpinSpec — бесплатное моделирование спектров ЯМР">
+  <meta property="og:description" content="Квантово-механический расчёт ЯМР-спектров, J-взаимодействие и магнитное поле. Примеры, открытый код, научный DOI.">
+  <meta property="og:url" content="https://nmrspec.org/ru">
+  <style>
+    :root { color-scheme: light; --bg:#f3f6fb; --white:#fff; --ink:#14253d; --muted:#4e6179; --blue:#225dd6; --blue-dark:#1345ae; --line:#d9e2ee; --faint:#eaf2ff; --radius:18px }
+    * { box-sizing:border-box }
+    html { scroll-behavior:smooth }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 Arial,Helvetica,sans-serif }
+    a { color:var(--blue); text-underline-offset:3px }
+    a:hover { color:var(--blue-dark) }
+    .container { width:min(1110px, calc(100% - 36px)); margin:0 auto }
+    .topbar { background:var(--white); border-bottom:1px solid var(--line) }
+    .topbar .container { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:68px }
+    .logo { color:var(--ink); font-size:22px; font-weight:800; text-decoration:none; letter-spacing:-.6px }
+    .logo span { color:var(--blue) }
+    .nav { display:flex; align-items:center; flex-wrap:wrap; gap:12px 22px; font-size:14px }
+    .nav a { text-decoration:none; font-weight:600 }
+    .language { display:flex; border:1px solid var(--line); border-radius:999px; padding:3px; gap:3px; font-size:13px; background:#f8fafc }
+    .language a, .language span { padding:4px 10px; border-radius:999px; text-decoration:none; font-weight:700 }
+    .language span { background:var(--blue); color:white }
+    .hero { padding:68px 0 48px; background:linear-gradient(130deg,#e5efff 0%,#f5f9ff 46%,#fff 100%) }
+    .hero-grid { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,.9fr); align-items:center; gap:42px }
+    .eyebrow { color:#1553b9; font-size:13px; text-transform:uppercase; letter-spacing:.09em; font-weight:800; margin-bottom:10px }
+    h1 { font-size:clamp(34px,4.5vw,55px); line-height:1.13; letter-spacing:-1.8px; margin:0 0 20px }
+    h2 { font-size:clamp(26px,3vw,34px); line-height:1.22; margin:0 0 22px; letter-spacing:-.7px }
+    h3 { font-size:20px; line-height:1.3; margin:0 0 10px }
+    .intro { font-size:19px; line-height:1.62; color:#334a66; max-width:645px; margin:0 0 25px }
+    .actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:16px }
+    .button { display:inline-block; padding:13px 21px; border-radius:11px; text-decoration:none; font-weight:700; line-height:1.3 }
+    .button-primary { background:var(--blue); color:white; box-shadow:0 6px 16px #225dd62b }
+    .button-primary:hover { background:var(--blue-dark); color:white }
+    .button-ghost { border:1px solid #b9cceb; background:white; color:#174da7 }
+    .button-ghost:hover { background:#f7fbff }
+    .fine { margin:0; color:var(--muted); font-size:13px }
+    .visual { background:white; padding:15px; border:1px solid #cfdef1; border-radius:var(--radius); box-shadow:0 18px 45px #18335c12 }
+    .visual img { width:100%; height:auto; display:block; border-radius:9px; background:#f7fafd }
+    .visual figcaption { font-size:12px; color:var(--muted); padding:11px 2px 1px; line-height:1.5 }
+    main section { padding:56px 0 }
+    .section-lead { color:var(--muted); max-width:790px; font-size:17px; margin:-7px 0 22px }
+    .cards { display:grid; grid-template-columns:repeat(3,1fr); gap:18px }
+    .card { background:white; border:1px solid var(--line); border-radius:var(--radius); padding:24px; box-shadow:0 5px 16px #132e5210 }
+    .card p { margin:0; color:var(--muted) }
+    .tag { display:inline-block; padding:4px 10px; background:var(--faint); color:#1550ae; font-size:12px; font-weight:700; border-radius:999px; margin-bottom:15px }
+    .number { color:var(--blue); font-size:14px; font-weight:800; margin-bottom:9px }
+    .formula { background:#0e2745; color:#f3f8ff; font:17px/1.75 Georgia,serif; padding:22px 25px; border-radius:15px; overflow-wrap:anywhere }
+    .formula small { color:#d2dfed; font:13px/1.65 Arial,sans-serif; display:block; margin-top:10px }
+    .split { display:grid; grid-template-columns:1.2fr .8fr; gap:24px; align-items:start }
+    .split .card { height:100% }
+    .steps { margin:0; padding-left:25px }
+    .steps li { margin:0 0 12px; padding-left:5px }
+    .warning { border-left:4px solid #d59624; background:#fff8e9; color:#55441c; padding:19px 22px; border-radius:0 13px 13px 0 }
+    .warning p { margin:5px 0 0 }
+    .muted-area { background:#eaf0f8 }
+    .resource-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px }
+    .resource { border:1px solid #ccdaed; border-radius:14px; padding:19px; background:#fff; display:block; text-decoration:none }
+    .resource strong { display:block; color:var(--ink); font-size:18px }
+    .resource span { display:block; color:var(--muted); font-size:14px; margin-top:5px }
+    .resource:hover { border-color:var(--blue); box-shadow:0 3px 13px #15396511 }
+    footer { background:#112945; color:#d9e7f9; padding:27px 0; font-size:13px }
+    footer a { color:white }
+    footer .container { display:flex; justify-content:space-between; gap:15px; flex-wrap:wrap }
+    :focus-visible { outline:3px solid #2b78ef; outline-offset:3px }
+    @media(max-width:850px) { .hero-grid,.split { grid-template-columns:1fr } .visual { max-width:660px } .cards,.resource-grid { grid-template-columns:1fr 1fr } }
+    @media(max-width:560px) { .topbar .container { padding:12px 0; align-items:flex-start } .nav { justify-content:flex-end; gap:7px 12px } .nav .optional { display:none } .hero { padding:45px 0 34px } .intro { font-size:17px } .cards,.resource-grid { grid-template-columns:1fr } main section { padding:38px 0 } .formula { font-size:15px } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <a class="logo" href="/" aria-label="SpinSpec — калькулятор">Spin<span>Spec</span></a>
+      <nav class="nav" aria-label="Навигация">
+        <a class="optional" href="#examples">Примеры</a>
+        <a class="optional" href="#physics">Как работает</a>
+        <a href="/">Калькулятор ↗</a>
+        <div class="language" aria-label="Язык страницы">
+          <span aria-current="page">RU</span>
+          <a href="/" lang="en" hreflang="en" title="Open the English calculator">EN</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div>
+          <div class="eyebrow">Ядерный магнитный резонанс · Научное ПО</div>
+          <h1>Моделирование спектров ЯМР онлайн</h1>
+          <p class="intro"><strong>SpinSpec</strong> — бесплатная программа для расчёта спектров ядерного магнитного резонанса систем взаимодействующих ядерных спинов 1/2. Исследуйте J-связь, квантовые переходы и влияние величины магнитного поля.</p>
+          <div class="actions">
+            <a class="button button-primary" href="/">Открыть калькулятор →</a>
+            <a class="button button-ghost" href="#examples">Посмотреть учебные примеры</a>
+          </div>
+          <p class="fine">Калькулятор пока имеет английский интерфейс. Эта страница — русскоязычное описание и руководство для начала работы. Регистрация не нужна.</p>
+        </div>
+        <figure class="visual">
+          <img src="/static/spectra.png" alt="Пример представления ЯМР-спектров в SpinSpec" loading="eager">
+          <figcaption>Визуализация ЯМР-спектров. Точные частоты и относительные интенсивности рассчитываются для заданной спиновой системы.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="capabilities">
+      <div class="container">
+        <h2>Что можно рассчитать</h2>
+        <p class="section-lead">Программа строит гамильтониан спиновой системы и численно находит разрешённые моделью спектральные переходы.</p>
+        <div class="cards">
+          <article class="card"><div class="tag">Спиновая система</div><h3>J-взаимодействие</h3><p>Задайте ядра, их гиромагнитные отношения, химические сдвиги и константы скалярной спин-спиновой связи. Для нескольких взаимодействующих спинов рассчитывается полный гамильтониан.</p></article>
+          <article class="card"><div class="tag">Магнитное поле</div><h3>От сильного к слабому</h3><p>Изменяйте внешнее магнитное поле и сравнивайте рассчитанные спектры: от обычных лабораторных условий до слабых полей, включая магнитное поле Земли.</p></article>
+          <article class="card"><div class="tag">Результаты</div><h3>Частоты и линии</h3><p>Получайте частоты переходов, относительные модельные интенсивности и линии с лоренцевым уширением. Доступны графики и файлы расчётов.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="muted-area" id="examples">
+      <div class="container">
+        <h2>Три примера для студентов</h2>
+        <p class="section-lead">В калькуляторе откройте список <strong>Examples</strong> и выберите систему. Можно менять параметры и повторять расчёт.</p>
+        <div class="cards">
+          <article class="card">
+            <div class="number">01 · Два спина</div>
+            <h3>Дублеты и J-связь</h3>
+            <p>Начните с файла <code>two_spins.set</code>. Измените константу связи и величину магнитного поля. Сравните положение и расщепление линий.</p>
+          </article>
+          <article class="card">
+            <div class="number">02 · Фосфорорганика</div>
+            <h3>Система ¹H–³¹P</h3>
+            <p>Откройте пример <code>Trimethyl_phosphate (one brench).set</code> — модель одной ветви триметилфосфата с тремя протонами и ядром ³¹P.</p>
+          </article>
+          <article class="card">
+            <div class="number">03 · Гетероядерная система</div>
+            <h3>¹⁹F и ¹H</h3>
+            <p>Используйте <code>2_2_2_TriFluoro_Ethanol.set</code>. Сравните частотную структуру спектра при разных магнитных полях, учитывая ограничения модели интенсивностей.</p>
+          </article>
+        </div>
+        <div class="actions" style="margin:24px 0 0"><a class="button button-primary" href="/">Перейти к примерам в калькуляторе →</a><a class="button button-ghost" href="/tutorial">Полное руководство (EN)</a></div>
+      </div>
+    </section>
+
+    <section id="physics">
+      <div class="container">
+        <h2>Как устроен расчёт</h2>
+        <div class="split">
+          <div>
+            <p class="section-lead" style="margin-top:0">Для N ядер со спином 1/2 размерность гильбертова пространства равна 2<sup>N</sup>. SpinSpec строит матрицу гамильтониана с зеемановским взаимодействием и изотропными J-связями, затем диагонализует её с помощью библиотеки GSL.</p>
+            <div class="formula" aria-label="Частота перехода равна модулю разности собственных значений гамильтониана в герцах">
+              ν<sub>ij</sub> = |E<sub>j</sub> − E<sub>i</sub>|
+              <small>Собственные значения выражены в частотных единицах (Гц). Относительная интенсивность вычисляется по матричному элементу оператора наблюдения между собственными состояниями.</small>
+            </div>
+          </div>
+          <article class="card">
+            <h3>Первый расчёт</h3>
+            <ol class="steps">
+              <li>Откройте <a href="/">онлайн-калькулятор SpinSpec</a>.</li>
+              <li>Выберите систему в поле <strong>Examples</strong>.</li>
+              <li>При необходимости измените магнитное поле <strong>External field</strong>.</li>
+              <li>Нажмите <strong>Calculate spectrum</strong> и изучите линии и результаты.</li>
+            </ol>
+          </article>
+        </div>
+        <div class="warning" style="margin-top:26px">
+          <strong>Важно при интерпретации интенсивностей.</strong>
+          <p>В опубликованной версии SpinSpec спины входят в оператор наблюдения с одинаковыми весами. Гиромагнитные отношения не учитываются в нём как коэффициенты чувствительности детектирования. Поэтому амплитуды — относительные интенсивности данной модели, а не количественный прогноз экспериментального сигнала. Особенно осторожно следует интерпретировать гетероядерные спектры в нулевом и ультраслабом поле. Спиновые группы пока не выделяются в отдельные физически независимые компоненты спектра.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="muted-area" id="about">
+      <div class="container">
+        <h2>Открытое научное программное обеспечение</h2>
+        <p class="section-lead">SpinSpec разработан Павлом Куприяновым (Pavel Kupriyanov). Программа доступна бесплатно через веб-интерфейс; исходный код на C и Python открыт под лицензией GNU GPL версии 3 или более поздней. Научная версия 1.0.0 сохранена в архиве Zenodo и имеет DOI.</p>
+        <div class="resource-grid">
+          <a class="resource" href="/" aria-label="Открыть онлайн-калькулятор"><strong>Онлайн-калькулятор ↗</strong><span>Расчёт спектров в браузере без установки</span></a>
+          <a class="resource" href="https://github.com/scleroze/SpinSpec" target="_blank" rel="noopener noreferrer"><strong>Исходный код ↗</strong><span>GitHub: примеры, сборка, GPLv3</span></a>
+          <a class="resource" href="https://doi.org/10.5281/zenodo.23696822" target="_blank" rel="noopener noreferrer"><strong>Научный DOI ↗</strong><span>10.5281/zenodo.23696822 · версия 1.0.0</span></a>
+        </div>
+        <p style="font-size:14px;color:var(--muted);margin-top:20px">Если вы используете SpinSpec при подготовке научной публикации, пожалуйста, укажите программу и DOI использованной версии. Библиографические сведения доступны в <a href="https://github.com/scleroze/SpinSpec/blob/main/CITATION.cff">CITATION.cff</a>.</p>
+      </div>
+    </section>
+  </main>
+  <footer><div class="container"><span>© 2026 Pavel Kupriyanov · SpinSpec</span><span>Научное ПО · <a href="/">English calculator</a> · <a href="https://github.com/scleroze/SpinSpec">GitHub</a></span></div></footer>
+</body>
+</html>
