@@ -123,6 +123,14 @@ def read_index(request: Request) -> HTMLResponse:
     audit_event("page_open", ip, {})
     return HTMLResponse(INDEX_HTML.read_text(encoding="utf-8"))
 
+@app.get("/ru", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/ru/", response_class=HTMLResponse, include_in_schema=False)
+def read_russian_page(request: Request) -> HTMLResponse:
+    ip = get_client_ip(request)
+    audit_event("page_open_ru", ip, {})
+    return HTMLResponse((TEMPLATES_DIR / "ru.html").read_text(encoding="utf-8"))
+
+
 def get_client_ip(request: Request) -> str:
     return (
         request.headers.get("CF-Connecting-IP")
