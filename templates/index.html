@@ -1,8 +1,11 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <link rel="canonical" href="https://nmrspec.org/" />
+  <link rel="alternate" hreflang="en" href="https://nmrspec.org/" />
+  <link rel="alternate" hreflang="ru" href="https://nmrspec.org/ru" />
+  <link rel="alternate" hreflang="x-default" href="https://nmrspec.org/" />
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NMR Spectrum Simulator Online | SpinSpec</title>
@@ -350,6 +353,11 @@
 <body>
   <div class="page">
     <section class="panel left-panel">
+      <nav aria-label="Language" style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;font-size:13px;align-items:center;">
+        <span lang="en" aria-current="page" style="font-weight:700;color:#1d4ed8;">EN</span>
+        <span aria-hidden="true" style="color:#94a3b8;">|</span>
+        <a href="/ru" lang="ru" hreflang="ru" style="font-weight:700;">RU · Русский</a>
+      </nav>
       <h1>SpinSpec</h1>
       <p class="subtitle">Hamiltonian-based NMR spectrum modeling</p>
       
