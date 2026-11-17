@@ -1,0 +1,41 @@
+name: Render experimental SpinSpec spectrum
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [experimental/group-resolved-observer]
+    paths:
+      - 'scripts/plot_experimental_spectrum.py'
+      - '.github/workflows/plot-experimental-spectrum.yml'
+      - 'bin/engine_matrix.c'
+      - 'bin/observer_groups.h'
+      - 'bin/observer_invariant.h'
+      - 'examples/Trimethyl_phosphate (one brench).set'
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install scientific plotting and engine dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgsl-dev gnuplot-nox python3-numpy python3-matplotlib
+      - name: Build C engine and its legacy graph helper
+        run: |
+          gcc -O2 -fopenmp bin/engine_matrix.c -o bin/engine_matrix -lgsl -lgslcblas -lm
+          gcc -O2 bin/matrix_graph.c bin/GnuGraph.c -o bin/matrix_graph -lm
+      - name: Generate spectra from C engine
+        run: |
+          /usr/bin/python3 scripts/plot_experimental_spectrum.py
+          test -s spectrum-preview/SpinSpec_B0_zero.png
+          test -s spectrum-preview/SpinSpec_B0_0p05mT.png
+          test -s spectrum-preview/Sp_invariant_zero.csv
+          test -s spectrum-preview/Sp_invariant_0p05mT.csv
+      - name: Save PNG and CSV results
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpinSpec-experimental-spectra
+          path: spectrum-preview/
+          if-no-files-found: error
+          retention-days: 30
