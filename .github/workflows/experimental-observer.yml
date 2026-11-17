@@ -45,3 +45,7 @@ jobs:
           assert any(float(r["total_strength"]) > 0 for r in rows)
           print("Observer CSV closure verified:", len(rows), "transitions")
           PY
+      - name: Analytical 1H-31P spectral regression at six fields
+        run: |
+          cd bin
+          python3 ../tests/test_hp_analytic.py
