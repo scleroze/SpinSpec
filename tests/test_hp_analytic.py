@@ -77,10 +77,11 @@ def accum_at_frequencies(
 def run_case(field_mt: float) -> tuple[float, float]:
     model = Path("test_hp_analytic.set")
     model.write_text(
-        f"#HP_analytic\\n42.578 17.240\\n0 0\\n{field_mt:.12g}\\n"
-        "0 1 11\\n\\nGraph 0 1\\n1.2 1.2\\n0.1 100\\n",
+        f"#HP_analytic\n42.578 17.240\n0 0\n{field_mt:.12g}\n"
+        "0 1 11\n\nGraph 0 1\n1.2 1.2\n0.1 100\n",
         encoding="ascii",
     )
+    Path("Sp_groups_00000.csv").unlink(missing_ok=True)
     env = dict(os.environ, SPINSPEC_OBSERVER_GROUPS="0,1", OMP_NUM_THREADS="1")
     proc = subprocess.run(
         ["./engine_matrix", str(model)],
