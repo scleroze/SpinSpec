@@ -96,12 +96,12 @@ def run_one(filename,field,groups):
             max_error=max(max_error,abs(x-y))
             assert abs(x-y)<1e-7*max(1,abs(x),abs(y)),(filename,field,i,key,x,y)
         for g,value in enumerate(target["group_strength"]):
-            x=float(row[f"group_strength{g}"])
+            x=float(row[f"strength_g{g}"])
             max_error=max(max_error,abs(x-value))
             assert abs(x-value)<1e-7*max(1,abs(x),abs(value)),(filename,field,i,g,x,value)
     # Exact one-sided Frobenius-norm sum rule; includes DC!
     for g,op in enumerate(operators):
-        observed=sum(float(r[f"group_strength{g}"]) for r in actual)
+        observed=sum(float(r[f"strength_g{g}"]) for r in actual)
         predicted=np.sum(op**2)/2
         assert abs(observed-predicted)<1e-7*max(1,abs(predicted)),(filename,field,g,observed,predicted)
     combined=sum(operators)
