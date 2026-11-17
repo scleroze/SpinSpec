@@ -36,6 +36,58 @@ The new output `Sp_groups_00000.csv` contains
 by `amplitude_gN,strength_gN` for each group. It is separate from
 legacy `Sp_00000.dat` and `Res_*.dat`.
 
+## Basis-invariant spectrum including zero frequency
+
+The opt-in experimental engine also exports `Sp_invariant_00000.csv`.
+Unlike the transition-by-transition `Sp_groups_00000.csv`, its rows
+refer to **pairs of energy eigenspaces**. The CSV has columns
+
+```text
+block_a,block_b,dim_a,dim_b,energy_a_hz,energy_b_hz,frequency_hz,
+total_strength,interference,strength_g0,strength_g1,...
+```
+
+The block dimensions allow the reader to distinguish exact or numerical
+degeneracies. No amplitude is given for a degenerate block pair because
+individual amplitudes depend on the basis; only basis-invariant strengths
+are meaningful.
+
+Define the orthogonal projectors `P_a` onto the energy blocks. For a real
+symmetric observation operator `O = sum_g O_g`:
+
+```text
+frequency(a,b) = abs(E_b - E_a), a < b
+strength(a,b)  = Tr(P_a O P_b O),  a < b
+
+frequency(a,a) = 0
+strength(a,a)  = (1/2) Tr(P_a O P_a O)
+```
+
+Group strengths follow the same rules with `O_g` in place of `O`.
+The interference column is the total strength minus the sum of group
+strengths. **Within the zero-frequency block, diagonal matrix elements
+are included**. This avoids the arbitrary rotation dependence of an
+off-diagonal-only transition list.
+
+This is a *one-sided positive-frequency power convention*, with a half
+weight at zero frequency. It obeys the exact sum rule
+
+```text
+sum_(0 <= frequency) strength = (1/2) Tr(O^2).
+```
+
+The zero-frequency row is an algebraic component of the chosen operator
+model, not a prediction of a detectable DC signal: experimental FID
+processing, field switching, initial populations and receiver coupling
+are outside the current model.
+
+The energy-block numerical tolerance is
+`max(1e-10 Hz, 64 * DBL_EPSILON * max(1 Hz, max(abs(E_i))))`.
+Levels that differ below this tolerance are treated as numerically
+degenerate. The reference test rotates eigenvectors inside degenerate
+spaces to verify invariance, and a separate independent NumPy test
+checks the full including-zero-frequency matrix-element sum rule.
+
 ## Mathematical definition
 
 For each group `g`, define the dimensionless transverse operator
@@ -74,10 +126,10 @@ and then squaring produces the full result.
   field-switching sequence, vector magnetometry orientation and
   dynamics.
 - Individual eigenvectors are not uniquely defined inside degenerate
-  eigenspaces, so **individual** transitions at exactly degenerate
-  frequencies may depend on the arbitrary eigenbasis. Observables
-  should be aggregated over degenerate subspaces before physical
-  interpretation, with a stated numerical tolerance.
+  eigenspaces: `Sp_groups_*.csv` still contains arbitrary eigenvector-
+  dependent transition-by-transition amplitudes. Use the new
+  `Sp_invariant_*.csv` for basis-invariant energy-block intensities,
+  especially at B=0.
 - Experimental CSV files include every pair of eigenstates, including
   zero-strength entries. Signed amplitudes and cross terms are for
   diagnostics.
