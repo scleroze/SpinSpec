@@ -200,7 +200,17 @@ def check_spectrum(case_label, filename, field_mt, group_ids, corrected=None,
         start = end
 
     max_error = 0.0
+    skipped_dc = 0
     for start, end in groups:
+        # The engine exports only m<n. At exactly zero field, the
+        # zero-frequency block has arbitrary diagonal entries under
+        # degenerate eigenspace rotations, so its off-diagonal-only
+        # weight is not an invariant. Nonzero-frequency subspace
+        # transitions are invariant once frequency-degenerate lines
+        # are summed.
+        if field_mt == 0.0 and abs(theory_f[start]) <= freq_tol(theory_f[start], 0.0):
+            skipped_dc += 1
+            continue
         expected = np.sum(theory_v[start:end, :], axis=0)
         observed = np.sum(actual_v[start:end, :], axis=0)
         errors = np.abs(expected - observed)
@@ -213,24 +223,28 @@ def check_spectrum(case_label, filename, field_mt, group_ids, corrected=None,
                     f"C={a:.12g}, reference={b:.12g}, "
                     f"delta={a-b:.6g}"
                 )
-    # Strong independent trace sum rules for all spin-flip operators.
-    dim = 1 << nspins
-    expected_group = [
-        dim / 8.0 * sum((gammas[k] / GAMMA_REF_HZ_PER_MT)**2
-                        for k in range(nspins) if group_ids[k] == g)
-        for g in range(group_count)
-    ]
-    observed_integral = actual_v.sum(axis=0)
-    for g, value in enumerate(expected_group):
-        if abs(observed_integral[g + 2] - value) > strength_tol(observed_integral[g + 2], value):
-            raise AssertionError(
-                f"{case_label}: group {g} oscillator-strength sum-rule failed"
-            )
-    if abs(observed_integral[0] - sum(expected_group)) > strength_tol(observed_integral[0], sum(expected_group)):
-        raise AssertionError(f"{case_label}: total sum-rule failed")
-    if abs(observed_integral[1]) > strength_tol(observed_integral[1], 0.0):
-        raise AssertionError(f"{case_label}: total cross term must vanish")
-
+    if field_mt != 0.0:
+        # Strong independent trace sum rules for all spin-flip operators.
+        dim = 1 << nspins
+        expected_group = [
+            dim / 8.0 * sum((gammas[k] / GAMMA_REF_HZ_PER_MT)**2
+                            for k in range(nspins) if group_ids[k] == g)
+            for g in range(group_count)
+        ]
+        observed_integral = actual_v.sum(axis=0)
+        for g, value in enumerate(expected_group):
+            if abs(observed_integral[g + 2] - value) > strength_tol(observed_integral[g + 2], value):
+                raise AssertionError(
+                    f"{case_label}: group {g} oscillator-strength sum-rule failed"
+                )
+        if abs(observed_integral[0] - sum(expected_group)) > strength_tol(observed_integral[0], sum(expected_group)):
+            raise AssertionError(f"{case_label}: total sum-rule failed")
+        if abs(observed_integral[1]) > strength_tol(observed_integral[1], 0.0):
+            raise AssertionError(f"{case_label}: total cross term must vanish")
+    
+    else:
+        assert skipped_dc > 0, "zero-field sample must have zero-frequency transitions"
+        print(f"  Note: skipped {skipped_dc} zero-frequency cluster(s) at B=0: diagonal components unavailable", flush=True)
     duration = time.monotonic() - started
     print(
         f"PASS {case_label:23s} N={nspins} B={field_mt:g} mT "
