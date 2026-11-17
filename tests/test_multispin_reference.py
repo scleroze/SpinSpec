@@ -5,7 +5,7 @@ Reference Hamiltonian and operators are constructed using independent NumPy
 matrix operations. This does not call the C implementation's builders and
 does not reuse its diagonalization results. It compares all transition
 frequencies and coherent group strengths, aggregating degeneracies.
-Original example files are not modified.
+The example inputs are validated and read without modification.
 """
 from __future__ import annotations
 
@@ -32,26 +32,12 @@ def strength_tol(a: float, b: float) -> float:
     return 4e-7 * max(1.0, abs(a), abs(b))
 
 
-def read_model(filename: str, corrected: str | None):
+def read_model(filename: str):
     path = EXAMPLES / filename
     lines = path.read_text(encoding="utf-8").splitlines()
     gammas = list(map(float, lines[1].split()))
     shifts = list(map(float, lines[2].split()))
     n = len(gammas)
-
-    if corrected == "three_gamma":
-        assert filename == "three_spins.set" and gammas[1] == 42578.0
-        gammas[1] = 42.578
-        lines[1] = " ".join(str(g) for g in gammas)
-    elif corrected == "benzene_shifts":
-        assert filename == "1_3_5_Trifluoro_benzene.set"
-        assert len(shifts) == 4 and n == 6
-        # Explicitly stated TEST ASSUMPTION, not a correction of the published
-        # input: the two missing chemical shifts are assumed to be zero.
-        shifts.extend([0.0, 0.0])
-        lines[2] = " ".join(str(x) for x in shifts)
-    elif corrected is not None:
-        raise ValueError("Unknown correction type")
 
     if len(shifts) != n:
         raise ValueError(
@@ -121,9 +107,9 @@ def reference_spectrum(gammas, shifts, couplings, field_mt, group_ids):
     return frequencies[order], values[order]
 
 
-def check_spectrum(case_label, filename, field_mt, group_ids, corrected=None,
+def check_spectrum(case_label, filename, field_mt, group_ids,
                    timeout_seconds=160):
-    lines, gammas, shifts, couplings = read_model(filename, corrected)
+    lines, gammas, shifts, couplings = read_model(filename)
     nspins = len(gammas)
     if len(group_ids) != nspins:
         raise ValueError(f"{case_label}: group count != spin count")
@@ -258,34 +244,35 @@ def check_spectrum(case_label, filename, field_mt, group_ids, corrected=None,
 
 def main():
     cases = [
-        ("three_raw", "three_spins.set", (0.05,), [0, 0, 1], None),
-        ("three_corrected", "three_spins.set", (0, 0.05, 10), [0, 0, 1], "three_gamma"),
-        ("trimethyl_P", "Trimethyl_phosphate (one brench).set", (0, 0.05, 0.5, 5000), [0, 0, 0, 1], None),
-        ("triethyl_P", "Triethyle_phosphate (one brench).set", (0, 0.05, 5000), [0, 0, 0, 0, 0, 1], None),
-        ("trifluoro_ethanol", "2_2_2_TriFluoro_Ethanol.set", (0, 0.05, 1, 9394.7), [0, 0, 1, 1, 1, 0], None),
-        ("trifluorobenzene_test", "1_3_5_Trifluoro_benzene.set", (0, 0.05, 9394.7), [0, 0, 0, 1, 1, 1], "benzene_shifts"),
-        ("tetrafluoropropanol", "2_2_3_3_TetraFluoro_1-Propanol.set", (0.05,), [0, 0, 0, 1, 1, 2, 1, 0], None),
+        ("three", "three_spins.set", (0, 0.05, 10), [0, 0, 1]),
+        ("trimethyl_P", "Trimethyl_phosphate (one brench).set", (0, 0.05, 0.5, 5000), [0, 0, 0, 1]),
+        ("triethyl_P", "Triethyle_phosphate (one brench).set", (0, 0.05, 5000), [0, 0, 0, 0, 0, 1]),
+        ("trifluoro_ethanol", "2_2_2_TriFluoro_Ethanol.set", (0, 0.05, 1, 9394.7), [0, 0, 1, 1, 1, 0]),
+        ("trifluorobenzene", "1_3_5_Trifluoro_benzene.set", (0, 0.05, 9394.7), [0, 0, 0, 1, 1, 1]),
+        ("tetrafluoropropanol", "2_2_3_3_TetraFluoro_1-Propanol.set", (0.05,), [0, 0, 0, 1, 1, 1, 1, 0]),
     ]
-    # Validate the *actual* original files; never quietly fix their defects.
-    issues = []
-    for filename in ("three_spins.set", "1_3_5_Trifluoro_benzene.set"):
-        ls = (EXAMPLES / filename).read_text(encoding="utf-8").splitlines()
-        n = len(ls[1].split())
-        m = len(ls[2].split())
-        if m != n:
-            issues.append(f"{filename}: {n} spin gammas, {m} chemical shifts")
-        if filename == "three_spins.set" and float(ls[1].split()[1]) > 1000:
-            issues.append(f"{filename}: second gamma is 42578 MHz/T, anomalous")
-    assert len(issues) == 2, issues
-    print("Original example input issues:", "; ".join(issues), flush=True)
+    for _, filename, _, _ in cases:
+        lines = (EXAMPLES / filename).read_text(encoding="utf-8").splitlines()
+        gammas = list(map(float, lines[1].split()))
+        shifts = list(map(float, lines[2].split()))
+        assert len(gammas) == len(shifts), filename
+        assert len(gammas) >= 2, filename
+        assert max(abs(g) for g in gammas) < 100, filename
+    # Regression guards for specific historical input mistakes.
+    assert (EXAMPLES / "three_spins.set").read_text(encoding="utf-8").splitlines()[1].split()[1] == "42.578"
+    benzene_lines = (EXAMPLES / "1_3_5_Trifluoro_benzene.set").read_text(encoding="utf-8").splitlines()
+    assert len(benzene_lines[2].split()) == 6
+    tetra_lines = (EXAMPLES / "2_2_3_3_TetraFluoro_1-Propanol.set").read_text(encoding="utf-8").splitlines()
+    assert float(tetra_lines[1].split()[5]) == 40.053
+    print("PASS: example parameter validation and historical typo guards", flush=True)
 
     passed = 0
-    for label, name, fields, gids, correction in cases:
+    for label, name, fields, gids in cases:
         for field in fields:
-            check_spectrum(label, name, field, gids, corrected=correction,
+            check_spectrum(label, name, field, gids,
                            timeout_seconds=230 if len(gids) >= 8 else 90)
             passed += 1
-    print(f"PASS multi-spin reference: {passed} C-vs-NumPy cases; {len(issues)} input issues noted")
+    print(f"PASS multi-spin reference: {passed} C-vs-NumPy cases; all example inputs valid")
 
 
 if __name__ == "__main__":
