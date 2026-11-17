@@ -594,7 +594,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
                 char invariant_filename[64];
                 FILE *invariant_file;
                 if (!eigenvalues) {
-                    fprintf(stderr, "Invariant observer: allocation failure.\\n");
+                    fprintf(stderr, "Invariant observer: allocation failure.\n");
                     exit(EXIT_FAILURE);
                 }
                 for (int ei = 0; ei < StatesNumber; ++ei)
@@ -602,7 +602,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
                 if (ss_obs_invariant_build(StatesNumber, ngroups, obs_pairs,
                         pair_count, evec_rowmajor, eigenvalues,
                         &invariant) != 0) {
-                    fprintf(stderr, "Invariant observer: construction failure.\\n");
+                    fprintf(stderr, "Invariant observer: construction failure.\n");
                     free(eigenvalues);
                     exit(EXIT_FAILURE);
                 }
@@ -620,7 +620,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
                     "frequency_hz,total_strength,interference");
                 for (int g = 0; g < ngroups; ++g)
                     fprintf(invariant_file, ",strength_g%d", g);
-                fputc('\\n', invariant_file);
+                fputc('\n', invariant_file);
                 for (int k = 0; k < invariant.line_count; ++k) {
                     const SSObsInvariantLine *line = &invariant.lines[k];
                     fprintf(invariant_file,
@@ -632,11 +632,11 @@ for (i = 0; i < StatesNumber - 1; i++) {
                     for (int g = 0; g < ngroups; ++g)
                         fprintf(invariant_file, ",%.17g",
                                 line->group_strength[g]);
-                    fputc('\\n', invariant_file);
+                    fputc('\n', invariant_file);
                 }
                 fclose(invariant_file);
                 printf("Invariant observation written: %s, %d blocks "
-                       "(tolerance %.6g Hz)\\n", invariant_filename,
+                       "(tolerance %.6g Hz)\n", invariant_filename,
                        invariant.block_count,
                        invariant.energy_tolerance_hz);
                 ss_obs_invariant_free(&invariant);
