@@ -18,6 +18,8 @@ jobs:
         run: |
           gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_groups.c -o test_observer_groups -lm
           ./test_observer_groups
+          gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_invariant.c -o test_observer_invariant -lm
+          ./test_observer_invariant
       - name: Compile C engine and plot helper
         run: |
           gcc -O2 -fopenmp bin/engine_matrix.c -o bin/engine_matrix -lgsl -lgslcblas -lm
@@ -32,6 +34,7 @@ jobs:
           cmp -s legacy-transitions.dat Sp_00000.dat
           test -s Sp_00000.dat
           test -s Sp_groups_00000.csv
+          test -s Sp_invariant_00000.csv
           python3 - <<'PY'
           import csv, math
           with open("Sp_groups_00000.csv", newline="") as f:
