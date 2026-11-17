@@ -49,3 +49,8 @@ jobs:
         run: |
           cd bin
           python3 ../tests/test_hp_analytic.py
+
+      - name: Independent multi-spin NumPy regression
+        run: |
+          cd bin
+          python3 ../tests/test_multispin_reference.py
