@@ -57,3 +57,8 @@ jobs:
         run: |
           cd bin
           /usr/bin/python3 ../tests/test_multispin_reference.py
+
+      - name: Independent invariant zero-frequency projector regression
+        run: |
+          cd bin
+          /usr/bin/python3 ../tests/test_invariant_reference.py
