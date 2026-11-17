@@ -20,6 +20,7 @@
 #include <gsl/gsl_eigen.h>
 #include "engine_matrix.h"
 #include "observer_groups.h"
+#include "observer_invariant.h"
 #include <ctype.h>
 #include <time.h>
 #define MAX_LINE_LENGTH 1024
@@ -582,6 +583,65 @@ for (i = 0; i < StatesNumber - 1; i++) {
                 }
             }
             fclose(groups_file);
+            /*
+             * Subspace-aggregated, basis-invariant one-sided spectrum.
+             * Includes 1/2 of all matrix elements within each degenerate
+             * block at zero frequency, including diagonal elements.
+             */
+            {
+                SSObsInvariantSpectrum invariant = {0};
+                double *eigenvalues = malloc((size_t)StatesNumber * sizeof(*eigenvalues));
+                char invariant_filename[64];
+                FILE *invariant_file;
+                if (!eigenvalues) {
+                    fprintf(stderr, "Invariant observer: allocation failure.\\n");
+                    exit(EXIT_FAILURE);
+                }
+                for (int ei = 0; ei < StatesNumber; ++ei)
+                    eigenvalues[ei] = gsl_vector_get(eval, ei);
+                if (ss_obs_invariant_build(StatesNumber, ngroups, obs_pairs,
+                        pair_count, evec_rowmajor, eigenvalues,
+                        &invariant) != 0) {
+                    fprintf(stderr, "Invariant observer: construction failure.\\n");
+                    free(eigenvalues);
+                    exit(EXIT_FAILURE);
+                }
+                snprintf(invariant_filename, sizeof(invariant_filename),
+                         "Sp_invariant_%05d.csv", Bc);
+                invariant_file = fopen(invariant_filename, "w");
+                if (!invariant_file) {
+                    perror(invariant_filename);
+                    ss_obs_invariant_free(&invariant);
+                    free(eigenvalues);
+                    exit(EXIT_FAILURE);
+                }
+                fprintf(invariant_file,
+                    "block_a,block_b,dim_a,dim_b,energy_a_hz,energy_b_hz,"
+                    "frequency_hz,total_strength,interference");
+                for (int g = 0; g < ngroups; ++g)
+                    fprintf(invariant_file, ",strength_g%d", g);
+                fputc('\\n', invariant_file);
+                for (int k = 0; k < invariant.line_count; ++k) {
+                    const SSObsInvariantLine *line = &invariant.lines[k];
+                    fprintf(invariant_file,
+                        "%d,%d,%d,%d,%.17g,%.17g,%.17g,%.17g,%.17g",
+                        line->block_a, line->block_b,
+                        line->dim_a, line->dim_b, line->energy_a_hz,
+                        line->energy_b_hz, line->frequency_hz,
+                        line->total_strength, line->interference);
+                    for (int g = 0; g < ngroups; ++g)
+                        fprintf(invariant_file, ",%.17g",
+                                line->group_strength[g]);
+                    fputc('\\n', invariant_file);
+                }
+                fclose(invariant_file);
+                printf("Invariant observation written: %s, %d blocks "
+                       "(tolerance %.6g Hz)\\n", invariant_filename,
+                       invariant.block_count,
+                       invariant.energy_tolerance_hz);
+                ss_obs_invariant_free(&invariant);
+                free(eigenvalues);
+            }
             free(obs_pairs);
             free(evec_rowmajor);
             printf("Experimental group observer written: %s (%d groups)\n",
