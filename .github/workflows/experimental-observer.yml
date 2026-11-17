@@ -1,0 +1,44 @@
+name: Experimental group-resolved observer
+on:
+  push:
+    branches: [experimental/group-resolved-observer]
+  pull_request:
+    branches: [experimental/group-resolved-observer]
+
+jobs:
+  test-observer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install numerical dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgsl-dev gnuplot-nox
+      - name: Compile and run analytical tests
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_groups.c -o test_observer_groups -lm
+          ./test_observer_groups
+      - name: Compile C engine and plot helper
+        run: |
+          gcc -O2 -fopenmp bin/engine_matrix.c -o bin/engine_matrix -lgsl -lgslcblas -lm
+          gcc -O2 bin/matrix_graph.c bin/GnuGraph.c -o bin/matrix_graph -lm
+      - name: Check opt-in CSV and strength closure
+        run: |
+          cd bin
+          cp ../examples/two_spins.set .
+          OMP_NUM_THREADS=1 SPINSPEC_OBSERVER_GROUPS=0,1 ./engine_matrix two_spins.set > observer.log
+          test -s Sp_00000.dat
+          test -s Sp_groups_00000.csv
+          python3 - <<'PY'
+          import csv, math
+          with open("Sp_groups_00000.csv", newline="") as f:
+              rows = list(csv.DictReader(f))
+          assert len(rows) == 6, len(rows)
+          assert all(math.isfinite(float(r["total_strength"])) for r in rows)
+          for r in rows:
+              total = float(r["total_strength"])
+              summed = float(r["strength_g0"]) + float(r["strength_g1"]) + float(r["interference"])
+              assert abs(total - summed) <= 1e-8*max(1,abs(total)), (total,summed)
+          assert any(float(r["total_strength"]) > 0 for r in rows)
+          print("Observer CSV closure verified:", len(rows), "transitions")
+          PY
