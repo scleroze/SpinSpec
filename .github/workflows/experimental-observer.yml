@@ -13,7 +13,7 @@ jobs:
       - name: Install numerical dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgsl-dev gnuplot-nox
+          sudo apt-get install -y libgsl-dev gnuplot-nox python3-numpy
       - name: Compile and run analytical tests
         run: |
           gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_groups.c -o test_observer_groups -lm
@@ -53,4 +53,4 @@ jobs:
       - name: Independent multi-spin NumPy regression
         run: |
           cd bin
-          python3 ../tests/test_multispin_reference.py
+          /usr/bin/python3 ../tests/test_multispin_reference.py
