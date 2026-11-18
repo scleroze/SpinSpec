@@ -1,0 +1,52 @@
+name: Publish verified SpinSpec v1.1.0
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    if: contains(github.event.head_commit.message, '[publish v1.1.0]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install scientific dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgsl-dev gnuplot-nox python3-numpy
+      - name: Build experimental and legacy C executables
+        run: |
+          gcc -O2 -fopenmp bin/engine_matrix.c -o bin/engine_matrix -lgsl -lgslcblas -lm
+          gcc -O2 bin/matrix_graph.c bin/GnuGraph.c -o bin/matrix_graph -lm
+          gcc -std=c11 -O2 bin/group_graph.c -o bin/group_graph -lm
+      - name: Run numerical reference tests before release
+        run: |
+          gcc -std=c11 -O2 tests/test_observer_groups.c -o tests/test_observer_groups -lm
+          gcc -std=c11 -O2 tests/test_observer_invariant.c -o tests/test_observer_invariant -lm
+          ./tests/test_observer_groups
+          ./tests/test_observer_invariant
+          cd bin
+          /usr/bin/python3 ../tests/test_hp_analytic.py
+          /usr/bin/python3 ../tests/test_multispin_reference.py
+          /usr/bin/python3 ../tests/test_invariant_reference.py
+      - name: Check native zero-field group plot
+        run: |
+          cd bin
+          cp '../examples/Trimethyl_phosphate (one brench).set' release_check.set
+          sed -i '4c0' release_check.set
+          OMP_NUM_THREADS=1 SPINSPEC_OBSERVER_GROUPS=0,0,0,1 ./engine_matrix release_check.set > release_check.log
+          test -s group_spectrum_00000.jpg
+          test -s Sp_invariant_00000.csv
+          test -s data_00000.jpg
+      - name: Publish GitHub release v1.1.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v1.1.0 >/dev/null 2>&1; then
+            echo 'Release v1.1.0 already exists; do not overwrite it.'
+          else
+            gh release create v1.1.0 --target "$GITHUB_SHA" --title 'SpinSpec v1.1.0 — Group-resolved NMR spectra' --notes-file docs/release-notes-v1.1.md
+          fi
