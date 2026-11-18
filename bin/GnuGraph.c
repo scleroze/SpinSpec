@@ -48,8 +48,13 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   fprintf(gp, "unset ytics\n");
   fprintf(gp, "set border 1\n");
 // Determine the upper panel's frequency-axis tick interval.
+  /* Equal-weight total-spin observer commutes with isotropic J at B0=0:
+     no finite-frequency legacy line exists. Keep a valid axis and leave the
+     separate group-resolved J-spectrum to group_graph. */
+  if (max_freq < 1e-9) max_freq = 40.0;
   double raw_step = max_freq / 10.0;
-  int rounded_step = (int)(raw_step + 0.5);  // round to the nearest integer
+  int rounded_step = (int)(raw_step + 0.5);
+  if (rounded_step < 1) rounded_step = 1;  // round to the nearest integer
   fprintf(gp, "set xtics 0,%i,%lf\n", rounded_step, max_freq * 1.05);
   fprintf(gp, "set xtics nomirror\n");
 // Panel positions and dimensions use normalized screen coordinates.
