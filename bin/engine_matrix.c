@@ -744,6 +744,21 @@ for (i = 0; i < StatesNumber - 1; i++) {
           char command[256];
           sprintf(command, "./matrix_graph %s %d", Mfile, Bc); // invoke the graphing helper for this field step
           system(command);
+          /* In optional group mode, render the invariant result through
+             SpinSpec's native C/Gnuplot plotting path as a separate JPEG.
+             Legacy data_*.jpg and Res_*.dat remain untouched. */
+          {
+              const char *groups_mode = getenv("SPINSPEC_OBSERVER_GROUPS");
+              if (groups_mode && *groups_mode) {
+                  char group_command[192];
+                  snprintf(group_command, sizeof(group_command),
+                           "./group_graph %d %.12g", Bc, fwhm_hz);
+                  if (system(group_command) != 0) {
+                      fprintf(stderr, "Group spectrum plot failed.\n");
+                      return EXIT_FAILURE;
+                  }
+              }
+          }
           
 	 printf("Cycle\n");
     B0 = B0 + BS;
