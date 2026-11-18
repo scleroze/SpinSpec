@@ -8,6 +8,34 @@ Online project: https://nmrspec.org
 
 **Archived scientific release:** [SpinSpec v1.0.0](https://doi.org/10.5281/zenodo.23696822), DOI: [10.5281/zenodo.23696822](https://doi.org/10.5281/zenodo.23696822).
 
+## Group-resolved spin spectra (v1.1)
+
+SpinSpec v1.1 introduces an optional gamma-weighted observation operator,
+a decomposition into **up to ten user-defined spin groups** and a **signed
+interference** component. The Hamiltonian and J-couplings remain unchanged.
+For degenerate eigenspaces, the invariant output uses energy-subspace
+projectors, including a mathematically defined DC component.
+
+Use `SPINSPEC_OBSERVER_GROUPS=0,0,0,1` (one group ID per spin) for
+the H3–P example. The optional web-interface group field accepts
+`0 0 0 1`. Native **C/Gnuplot** generates
+`group_spectrum_00000.jpg` and `group_curve_00000.dat` while the
+full results, including DC, remain in `Sp_invariant_00000.csv`.
+
+For the optional mode compile an additional executable:
+
+```sh
+gcc -std=c11 -O2 bin/group_graph.c -o bin/group_graph -lm
+```
+
+The original `Sp_*.dat`, `Res_*.dat` and `data_*.jpg` are preserved
+for backward compatibility. **Group curves are operator strengths, not
+experimental FID amplitudes**: the initial density matrix, excitation,
+pulse sequence, longitudinal detector model and receiver response remain
+outside the scope of this version.
+
+See [group-resolved user guide](docs/group-resolved-v1.1.md).
+
 ## Getting started (Linux command line)
 
 **Online, without installation:** open [nmrspec.org](https://nmrspec.org), choose an example or enter spin parameters, and select **Calculate spectrum**. The browser interface runs calculations on the hosted server.
@@ -39,7 +67,7 @@ The transition frequencies are the absolute differences of eigenvalues expressed
 frequency(i,j) = abs(E[j] - E[i])
 ```
 
-Transition strengths are calculated from matrix elements of a single-spin-flip operator, transformed into the Hamiltonian eigenbasis. **In the current released engine all spins enter that operator with equal weights.** Nuclear gyromagnetic ratios affect the Hamiltonian but are **not yet used to weight the detection operator**; initial-state populations, receiver response and pulse-sequence dynamics are not modeled. Consequently, reported amplitudes should not be interpreted as calibrated experimental signal intensities. In particular, the current equal-weight detection model does not provide a general physically complete zero-field J-spectrum for heteronuclear systems.
+Transition strengths are calculated from matrix elements of a single-spin-flip operator, transformed into the Hamiltonian eigenbasis. **In the legacy mode all spins enter that operator with equal weights.** The optional v1.1 group mode weights the observation operator by the signed gyromagnetic ratios; in legacy mode they enter only the Hamiltonian. initial-state populations, receiver response and pulse-sequence dynamics are not modeled. Consequently, reported amplitudes should not be interpreted as calibrated experimental signal intensities. In particular, the current equal-weight detection model does not provide a general physically complete zero-field J-spectrum for heteronuclear systems.
 
 The engine sums Lorentzian profiles for visualization. Each chosen graph window uses a reference Larmor frequency for its selected spin; **these windows are not isotope-selective component spectra**.
 
@@ -131,7 +159,7 @@ The `app/`, `static/` and `templates/` directories contain a FastAPI application
 
 The repository includes a GitHub Actions smoke-test workflow that builds the C executables and runs two-spin and four-spin example calculations on pushes and pull requests. The original numerical regression verification was performed before the first public snapshot; the current public workflow checks that example outputs are generated, not that every numerical value matches a historical baseline.
 
-Planned work includes optional decomposition of transition contributions by spin group and a gyromagnetic-ratio-weighted magnetic-moment observation operator. **Neither capability should be assumed present in the current GitHub `main` numerical engine.**
+The opt-in v1.1 group mode offers spin-group decomposition with coherent interference and gamma weighting. See the new documentation for limitations and the distinction between numerical strengths and experimental amplitudes.
 
 ## License and attribution
 
