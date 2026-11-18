@@ -28,6 +28,7 @@ STATIC_DIR = BASE_DIR / "static"
 EXAMPLES_DIR = BASE_DIR / "examples"
 ENGINE_BIN = BIN_DIR / "engine_matrix"
 GRAPH_BIN = BIN_DIR / "matrix_graph"
+GROUP_GRAPH_BIN = BIN_DIR / "group_graph"
 INDEX_HTML = TEMPLATES_DIR / "index.html"
 LOGS_DIR = BASE_DIR / "logs"
 AUDIT_FILE = LOGS_DIR / "audit.jsonl"
@@ -72,12 +73,13 @@ class SpectrumRequest(BaseModel):
     graph: str = ""
     heights: str = ""
     linewidths: str = ""
+    observer_groups: str = ""
     example_name: str = ""
     example_modified: bool = False
 
     @field_validator(
         "title", "gammas", "shifts", "field",
-        "jcouplings", "graph", "heights", "linewidths"
+        "jcouplings", "graph", "heights", "linewidths", "observer_groups"
     )
     @classmethod
     def strip_text(cls, value: str) -> str:
@@ -90,6 +92,8 @@ class JobResult(BaseModel):
     image_url: Optional[str] = None
     spectrum_url: Optional[str] = None
     result_url: Optional[str] = None
+    group_image_url: Optional[str] = None
+    group_spectrum_url: Optional[str] = None
     message: str
 
 class AuditRequest(BaseModel):
@@ -273,10 +277,11 @@ def write_set_file(job_dir: Path, payload: SpectrumRequest) -> Path:
     return set_path
 
 
-def run_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
+def run_command(command: list[str], cwd: Path, env: Optional[dict] = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         command,
         cwd=str(cwd),
+        env=env,
         capture_output=True,
         text=True,
         timeout=JOB_TIMEOUT_SECONDS,
@@ -294,12 +299,16 @@ def make_graph_symlink(job_dir: Path) -> None:
 def collect_output(job_dir: Path) -> dict:
     image = job_dir / "data_00000.jpg"
     spectrum = job_dir / "Sp_00000.dat"
+    group_image = job_dir / "group_spectrum_00000.jpg"
+    invariant = job_dir / "Sp_invariant_00000.csv"
 
     result_candidates = sorted(job_dir.glob("Res_*_00000.dat"))
     result_file = result_candidates[0] if result_candidates else None
 
     return {
         "image": image if image.exists() else None,
+        "group_image": group_image if group_image.exists() else None,
+        "invariant": invariant if invariant.exists() else None,
         "spectrum": spectrum if spectrum.exists() else None,
         "result": result_file if result_file and result_file.exists() else None,
     }
@@ -411,8 +420,11 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
     try:
         set_path = write_set_file(job_dir, payload)
         make_graph_symlink(job_dir)
+        if payload.observer_groups:
+            make_group_graph_symlink(job_dir)
 
-        process = run_command([str(ENGINE_BIN), set_path.name], cwd=job_dir)
+        process = run_command([str(ENGINE_BIN), set_path.name], cwd=job_dir,
+                              env=observer_environment(payload))
         if process.returncode != 0:
             raise failed_process_response(process, "engine_matrix")
 
@@ -427,6 +439,7 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
             "nuclei": infer_nuclei_from_gammas(payload.gammas),
             "field_mT": payload.field,
             "linewidths": payload.linewidths,
+            "observer_groups": payload.observer_groups,
             "job_id": job_dir.name,
         })
             
