@@ -226,6 +226,20 @@ def validate_payload(payload: SpectrumRequest) -> None:
     if not payload.linewidths:
         raise HTTPException(status_code=400, detail="The 'Graph widths' ield must not be empty.")
 
+    if payload.observer_groups:
+        items = payload.observer_groups.replace(",", " ").split()
+        if len(items) != spin_count or any(
+            not item.isdecimal() or int(item) > 9 for item in items
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Expected exactly {spin_count} group IDs (0..9).",
+            )
+        if not GROUP_GRAPH_BIN.exists():
+            raise HTTPException(
+                status_code=503, detail="Group visualization is unavailable."
+            )
+
 def infer_spin_count(payload: SpectrumRequest) -> int:
     gammas = [x for x in payload.gammas.replace(",", " ").split() if x]
     shifts = [x for x in payload.shifts.replace(",", " ").split() if x]
@@ -296,6 +310,23 @@ def make_graph_symlink(job_dir: Path) -> None:
     link_path.symlink_to(GRAPH_BIN)
 
 
+def make_group_graph_symlink(job_dir: Path) -> None:
+    link_path = job_dir / "group_graph"
+    if not link_path.exists() and not link_path.is_symlink():
+        link_path.symlink_to(GROUP_GRAPH_BIN)
+
+
+def observer_environment(payload: SpectrumRequest) -> Optional[dict]:
+    if not payload.observer_groups:
+        return None
+    env = os.environ.copy()
+    env["SPINSPEC_OBSERVER_GROUPS"] = ",".join(
+        payload.observer_groups.replace(",", " ").split()
+    )
+    env["OMP_NUM_THREADS"] = "1"
+    return env
+
+
 def collect_output(job_dir: Path) -> dict:
     image = job_dir / "data_00000.jpg"
     spectrum = job_dir / "Sp_00000.dat"
@@ -324,6 +355,14 @@ def build_response(job_dir: Path, message: str) -> JobResult:
         image_url=f"/jobs/{job_id}/data_00000.jpg" if output["image"] else None,
         spectrum_url=f"/jobs/{job_id}/Sp_00000.dat" if output["spectrum"] else None,
         result_url=f"/jobs/{job_id}/{output['result'].name}" if output["result"] else None,
+        group_image_url=(
+            f"/jobs/{job_id}/group_spectrum_00000.jpg"
+            if output["group_image"] else None
+        ),
+        group_spectrum_url=(
+            f"/jobs/{job_id}/Sp_invariant_00000.csv"
+            if output["invariant"] else None
+        ),
         message=message,
     )
 
@@ -431,6 +470,10 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
         response = build_response(job_dir, "Calculation completed.")
         if response.image_url is None:
             raise HTTPException(status_code=500, detail="Calculation completed without final image.")
+        if payload.observer_groups and not response.group_image_url:
+            raise HTTPException(
+                status_code=500, detail="Group-resolved plot not generated."
+            )
         audit_event("calculate", ip, {
             "spins": spin_count,
             "title": payload.title,
