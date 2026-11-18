@@ -19,6 +19,8 @@
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_eigen.h>
 #include "engine_matrix.h"
+#include "observer_groups.h"
+#include "observer_invariant.h"
 #include <ctype.h>
 #include <time.h>
 #define MAX_LINE_LENGTH 1024
@@ -503,6 +505,151 @@ for (i = 0; i < StatesNumber - 1; i++) {
     }
 }
     printf("\nDone!\n"); 
+
+    /*
+     * Experimental, opt-in gamma-weighted group observation. Leave the legacy
+     * Sp_*.dat and Res_*.dat paths unchanged. When enabled, write a separate
+     * CSV for each magnetic-field step. Example:
+     *
+     *   SPINSPEC_OBSERVER_GROUPS=0,0,0,1 ./engine_matrix model.set
+     *
+     * This model includes coherent cross terms between groups, but omits
+     * populations, preparation and detector response. The group-resolved
+     * transition strengths are NOT additive without interference.
+     */
+    {
+        const char *group_spec = getenv("SPINSPEC_OBSERVER_GROUPS");
+        if (group_spec && *group_spec) {
+            int group_ids[S], ngroups = 0;
+            int pair_count;
+            size_t pair_capacity = (size_t)S * (size_t)StatesNumber / 2;
+            SSObsPair *obs_pairs = NULL;
+            double *evec_rowmajor = NULL;
+            FILE *groups_file = NULL;
+            char group_filename[64];
+            if (ss_obs_parse_groups(group_spec, S, group_ids, &ngroups) != 0) {
+                fprintf(stderr, "Invalid SPINSPEC_OBSERVER_GROUPS: expected %d comma-separated group IDs (0..9).\n", S);
+                exit(EXIT_FAILURE);
+            }
+            obs_pairs = malloc(pair_capacity * sizeof(*obs_pairs));
+            evec_rowmajor = malloc((size_t)StatesNumber * (size_t)StatesNumber * sizeof(*evec_rowmajor));
+            if (!obs_pairs || !evec_rowmajor) {
+                fprintf(stderr, "Group observer: allocation failure.\n");
+                free(obs_pairs); free(evec_rowmajor);
+                exit(EXIT_FAILURE);
+            }
+            pair_count = ss_obs_collect_pairs(StatesNumber, S, ngroups,
+                                               group_ids, G, I, obs_pairs,
+                                               pair_capacity);
+            if (pair_count < 0) {
+                fprintf(stderr, "Group observer: invalid spin-flip lookup.\n");
+                free(obs_pairs); free(evec_rowmajor);
+                exit(EXIT_FAILURE);
+            }
+            for (int aa = 0; aa < StatesNumber; ++aa)
+                for (int bb = 0; bb < StatesNumber; ++bb)
+                    evec_rowmajor[(size_t)aa * StatesNumber + bb] =
+                        gsl_matrix_get(evec, aa, bb);
+            snprintf(group_filename, sizeof(group_filename),
+                     "Sp_groups_%05d.csv", Bc);
+            groups_file = fopen(group_filename, "w");
+            if (!groups_file) {
+                perror(group_filename);
+                free(obs_pairs); free(evec_rowmajor);
+                exit(EXIT_FAILURE);
+            }
+            fprintf(groups_file, "state_i,state_j,frequency_hz,total_strength,interference");
+            for (int g = 0; g < ngroups; ++g)
+                fprintf(groups_file, ",amplitude_g%d,strength_g%d", g, g);
+            fprintf(groups_file, "\n");
+            for (int ei = 0; ei < StatesNumber-1; ++ei) {
+                for (int ej = ei+1; ej < StatesNumber; ++ej) {
+                    SSObsResult obs;
+                    double nu = fabs(gsl_vector_get(eval,ej) - gsl_vector_get(eval,ei));
+                    if (ss_obs_transition(StatesNumber, ngroups, obs_pairs,
+                                          pair_count, evec_rowmajor, ei, ej,
+                                          &obs) != 0) {
+                        fprintf(stderr, "Group observer: transition error.\n");
+                        fclose(groups_file);
+                        free(obs_pairs); free(evec_rowmajor);
+                        exit(EXIT_FAILURE);
+                    }
+                    fprintf(groups_file, "%d,%d,%.12g,%.12g,%.12g",
+                            ei+1, ej+1, nu, obs.total_strength, obs.interference);
+                    for (int g = 0; g < ngroups; ++g)
+                        fprintf(groups_file, ",%.12g,%.12g",
+                                obs.group_amplitude[g], obs.group_strength[g]);
+                    fputc('\n', groups_file);
+                }
+            }
+            fclose(groups_file);
+            /*
+             * Subspace-aggregated, basis-invariant one-sided spectrum.
+             * Includes 1/2 of all matrix elements within each degenerate
+             * block at zero frequency, including diagonal elements.
+             */
+            {
+                SSObsInvariantSpectrum invariant = {0};
+                double *eigenvalues = malloc((size_t)StatesNumber * sizeof(*eigenvalues));
+                char invariant_filename[64];
+                FILE *invariant_file;
+                if (!eigenvalues) {
+                    fprintf(stderr, "Invariant observer: allocation failure.\n");
+                    exit(EXIT_FAILURE);
+                }
+                for (int ei = 0; ei < StatesNumber; ++ei)
+                    eigenvalues[ei] = gsl_vector_get(eval, ei);
+                if (ss_obs_invariant_build(StatesNumber, ngroups, obs_pairs,
+                        pair_count, evec_rowmajor, eigenvalues,
+                        &invariant) != 0) {
+                    fprintf(stderr, "Invariant observer: construction failure.\n");
+                    free(eigenvalues);
+                    exit(EXIT_FAILURE);
+                }
+                snprintf(invariant_filename, sizeof(invariant_filename),
+                         "Sp_invariant_%05d.csv", Bc);
+                invariant_file = fopen(invariant_filename, "w");
+                if (!invariant_file) {
+                    perror(invariant_filename);
+                    ss_obs_invariant_free(&invariant);
+                    free(eigenvalues);
+                    exit(EXIT_FAILURE);
+                }
+                fprintf(invariant_file,
+                    "block_a,block_b,dim_a,dim_b,energy_a_hz,energy_b_hz,"
+                    "frequency_hz,total_strength,interference");
+                for (int g = 0; g < ngroups; ++g)
+                    fprintf(invariant_file, ",strength_g%d", g);
+                fputc('\n', invariant_file);
+                for (int k = 0; k < invariant.line_count; ++k) {
+                    const SSObsInvariantLine *line = &invariant.lines[k];
+                    fprintf(invariant_file,
+                        "%d,%d,%d,%d,%.17g,%.17g,%.17g,%.17g,%.17g",
+                        line->block_a, line->block_b,
+                        line->dim_a, line->dim_b, line->energy_a_hz,
+                        line->energy_b_hz, line->frequency_hz,
+                        line->total_strength, line->interference);
+                    for (int g = 0; g < ngroups; ++g)
+                        fprintf(invariant_file, ",%.17g",
+                                line->group_strength[g]);
+                    fputc('\n', invariant_file);
+                }
+                fclose(invariant_file);
+                printf("Invariant observation written: %s, %d blocks "
+                       "(tolerance %.6g Hz)\n", invariant_filename,
+                       invariant.block_count,
+                       invariant.energy_tolerance_hz);
+                ss_obs_invariant_free(&invariant);
+                free(eigenvalues);
+            }
+            free(obs_pairs);
+            free(evec_rowmajor);
+            printf("Experimental group observer written: %s (%d groups)\n",
+                   group_filename, ngroups);
+        }
+    }
+
+
 
 // Release eigensolver objects after writing the transition list.
 	    gsl_vector_free(eval);
