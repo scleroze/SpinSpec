@@ -63,14 +63,9 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   fprintf(gp, "set origin 0,%f\n", Y_top);
   fprintf(gp, "set size 1,%f\n", H_top);
   fprintf(gp, "set xrange [0:%lf]\n", max_freq * 1.05);
-  fprintf(gp, "plot '-' with lines lc \"black\" lw 2 notitle\n");
-  while (fscanf(data, "%d %lf %lf %d %d %d", &n1, &freq, &ampl, &n2, &n3, &n4) == 6) {
-    if (ampl != 0.0) {
-        fprintf(gp, "%lf %lf\n", freq, 0.0);
-        fprintf(gp, "%lf %lf\n\n", freq, ampl);
-    }
-  }
-  fprintf(gp, "e\n");
+  /* The old plot '-' data stream is not supported inside multiplot in
+     current Gnuplot. Read the actual SpinSpec transition file instead. */
+  fprintf(gp, "plot \"%s\" skip 1 using 2:3 with impulses lc rgb \"black\" lw 2 notitle\n", flSp);
   fclose(data);
 // End of the upper stick-spectrum panel.
 
