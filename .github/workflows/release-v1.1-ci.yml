@@ -37,6 +37,9 @@ jobs:
           cd bin
           cp "../examples/Trimethyl_phosphate (one brench).set" test_model.set
           sed -i '4c0' test_model.set
+          # Numerical regression tests in this job also run from bin/,
+          # so remove their previously generated group outputs first.
+          rm -f group_spectrum_00000.jpg group_curve_00000.dat Sp_invariant_00000.csv Sp_groups_00000.csv
           OMP_NUM_THREADS=1 ./engine_matrix test_model.set > legacy.log
           test -s data_00000.jpg
           test ! -e group_spectrum_00000.jpg
