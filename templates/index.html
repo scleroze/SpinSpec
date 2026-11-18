@@ -433,6 +433,19 @@
           <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
         </div>
 
+        <div class="field">
+          <label for="observerGroups">Group-resolved spectrum (optional)</label>
+          <input id="observerGroups" name="observerGroups" type="text"
+                 placeholder="For 3 protons + 31P: 0 0 0 1" />
+          <div class="hint">
+            One group ID per spin (0–9), in nucleus order.
+            Produces a separate Gnuplot chart for total, groups and
+            signed interference. The 0 Hz component remains in the CSV,
+            not in the dynamic spectrum plot. Relative strengths, not
+            calibrated experimental amplitudes.
+          </div>
+        </div>
+
         <div class="button-row">
           <button type="button" class="secondary" id="saveSetBtn">Save set</button>
           <label class="file-label" for="openSetInput">Open set</label>
@@ -478,6 +491,12 @@
   </div>
 
   <img id="previewImage" alt="Spectrum preview" />
+  <div id="groupResult" style="display:none;margin-top:18px;">
+    <h3>Group-resolved spectrum (Gnuplot)</h3>
+    <p style="font-size:13px;">0 Hz is excluded from this dynamic plot, but retained in the downloadable invariant spectrum.</p>
+    <img id="groupPreviewImage" alt="Separate spin-group spectra and interference" style="width:100%;height:auto;" />
+    <a id="groupCsvLink" href="#" download>Download invariant transition strengths (CSV)</a>
+  </div>
 
   <div id="placeholder" class="placeholder">
 
@@ -629,6 +648,7 @@
         graph: document.getElementById('graph').value.trim(),
         heights: document.getElementById('heights').value.trim(),
         linewidths: document.getElementById('linewidths').value.trim(),
+        observer_groups: document.getElementById('observerGroups').value.trim(),
       };
     }
 
@@ -674,6 +694,9 @@
       document.getElementById('gammas').value = lines[1] ?? '';
       document.getElementById('shifts').value = lines[2] ?? '';
       document.getElementById('field').value = lines[3] ?? '';
+      // Group assignments are separate from the historic .set format.
+      // Clear them when loading a new model to avoid mismatched spin counts.
+      document.getElementById('observerGroups').value = '';
 
       let i = 4;
       const jLines = [];
@@ -711,6 +734,7 @@
     showInfoBtn.addEventListener('click', () => {
       previewImage.style.display = 'none';
       previewImage.removeAttribute('src');
+      document.getElementById('groupResult').style.display = 'none';
       placeholder.style.display = 'block';
       showMessage('');
       metaEl.textContent = `Current file: ${currentFileName || 'not selected'}.`;
@@ -732,6 +756,17 @@
       }
 
       return response.json();
+    }
+
+    function updateGroupPreview(result) {
+      const wrapper = document.getElementById('groupResult');
+      if (!result || !result.group_image_url || !result.group_spectrum_url) {
+        wrapper.style.display = 'none';
+        return;
+      }
+      document.getElementById('groupPreviewImage').src = result.group_image_url;
+      document.getElementById('groupCsvLink').href = result.group_spectrum_url;
+      wrapper.style.display = 'block';
     }
 
     function updatePreview(imageUrl, fileLabel = null) {
@@ -788,6 +823,7 @@
         }
 
         updateInteractiveButton(result);
+        updateGroupPreview(result);
 
         setStatus(result.message || 'Calculation completed.', 'ok');
       } catch (error) {
@@ -825,6 +861,7 @@
         }
 
         updateInteractiveButton(result);
+        updateGroupPreview(result);
 
         setStatus(result.message || 'Calculation completed.', 'ok');
       } catch (error) {

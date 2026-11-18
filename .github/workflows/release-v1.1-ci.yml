@@ -1,0 +1,79 @@
+name: SpinSpec v1.1 group-resolved release candidate
+
+on:
+  push:
+    branches: [release/1.1.0-group-spectra]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install required libraries and plotting tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgsl-dev gnuplot-nox python3-numpy
+      - name: Compile C binaries
+        run: |
+          gcc -O2 -fopenmp bin/engine_matrix.c -o bin/engine_matrix -lgsl -lgslcblas -lm
+          gcc -O2 bin/matrix_graph.c bin/GnuGraph.c -o bin/matrix_graph -lm
+          gcc -std=c11 -O2 -Wall -Wextra bin/group_graph.c -o bin/group_graph -lm
+      - name: Analytical and invariance tests
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_groups.c -o tests/test_observer_groups -lm
+          gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_invariant.c -o tests/test_observer_invariant -lm
+          ./tests/test_observer_groups
+          ./tests/test_observer_invariant
+      - name: Existing and new model numerical regressions
+        run: |
+          cd bin
+          /usr/bin/python3 ../tests/test_hp_analytic.py
+          /usr/bin/python3 ../tests/test_multispin_reference.py
+          /usr/bin/python3 ../tests/test_invariant_reference.py
+      - name: Gnuplot output and legacy mode checks
+        run: |
+          cd bin
+          cp "../examples/Trimethyl_phosphate (one brench).set" test_model.set
+          sed -i '4c0' test_model.set
+          # Numerical regression tests in this job also run from bin/,
+          # so remove their previously generated group outputs first.
+          rm -f group_spectrum_00000.jpg group_curve_00000.dat Sp_invariant_00000.csv Sp_groups_00000.csv
+          OMP_NUM_THREADS=1 ./engine_matrix test_model.set > legacy.log
+          test -s data_00000.jpg
+          test ! -e group_spectrum_00000.jpg
+          cp Sp_00000.dat legacy_transitions.dat
+          OMP_NUM_THREADS=1 SPINSPEC_OBSERVER_GROUPS=0,0,0,1 ./engine_matrix test_model.set > groups.log
+          cmp -s legacy_transitions.dat Sp_00000.dat
+          test -s Sp_invariant_00000.csv
+          test -s group_spectrum_00000.jpg
+          test -s group_curve_00000.dat
+          python3 - <<'PY'
+          import csv, math
+          with open("Sp_invariant_00000.csv", newline="") as f: rows=list(csv.DictReader(f))
+          assert any(float(r["frequency_hz"]) < 1e-8 for r in rows)
+          for target in (11.,22.):
+              assert any(abs(float(r["frequency_hz"])-target)<1e-5
+                         and float(r["total_strength"])>1e-6 for r in rows)
+          with open("group_curve_00000.dat") as f:
+              samples=[[float(v) for v in line.split()] for line in f]
+          assert len(samples)==2400
+          assert all(len(s)==5 and all(math.isfinite(v) for v in s) for s in samples)
+          # Total = group0 + group1 + signed interference
+          assert max(abs(s[1]-s[2]-s[3]-s[4]) for s in samples)<1e-6
+          print("PASS: C/Gnuplot AC lines at 11 and 22 Hz, group closure, legacy parity")
+          PY
+      - name: Python syntax checks
+        run: |
+          python3 -m py_compile app/app.py
+      - name: Upload release-candidate plots
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpinSpec-v1.1-Gnuplot-verification
+          path: |
+            bin/group_spectrum_00000.jpg
+            bin/data_00000.jpg
+            bin/Sp_invariant_00000.csv
+            bin/group_curve_00000.dat
+          if-no-files-found: error

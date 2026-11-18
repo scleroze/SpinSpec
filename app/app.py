@@ -28,6 +28,7 @@ STATIC_DIR = BASE_DIR / "static"
 EXAMPLES_DIR = BASE_DIR / "examples"
 ENGINE_BIN = BIN_DIR / "engine_matrix"
 GRAPH_BIN = BIN_DIR / "matrix_graph"
+GROUP_GRAPH_BIN = BIN_DIR / "group_graph"
 INDEX_HTML = TEMPLATES_DIR / "index.html"
 LOGS_DIR = BASE_DIR / "logs"
 AUDIT_FILE = LOGS_DIR / "audit.jsonl"
@@ -72,12 +73,13 @@ class SpectrumRequest(BaseModel):
     graph: str = ""
     heights: str = ""
     linewidths: str = ""
+    observer_groups: str = ""
     example_name: str = ""
     example_modified: bool = False
 
     @field_validator(
         "title", "gammas", "shifts", "field",
-        "jcouplings", "graph", "heights", "linewidths"
+        "jcouplings", "graph", "heights", "linewidths", "observer_groups"
     )
     @classmethod
     def strip_text(cls, value: str) -> str:
@@ -90,6 +92,8 @@ class JobResult(BaseModel):
     image_url: Optional[str] = None
     spectrum_url: Optional[str] = None
     result_url: Optional[str] = None
+    group_image_url: Optional[str] = None
+    group_spectrum_url: Optional[str] = None
     message: str
 
 class AuditRequest(BaseModel):
@@ -222,6 +226,20 @@ def validate_payload(payload: SpectrumRequest) -> None:
     if not payload.linewidths:
         raise HTTPException(status_code=400, detail="The 'Graph widths' ield must not be empty.")
 
+    if payload.observer_groups:
+        items = payload.observer_groups.replace(",", " ").split()
+        if len(items) != spin_count or any(
+            not item.isdecimal() or int(item) > 9 for item in items
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Expected exactly {spin_count} group IDs (0..9).",
+            )
+        if not GROUP_GRAPH_BIN.exists():
+            raise HTTPException(
+                status_code=503, detail="Group visualization is unavailable."
+            )
+
 def infer_spin_count(payload: SpectrumRequest) -> int:
     gammas = [x for x in payload.gammas.replace(",", " ").split() if x]
     shifts = [x for x in payload.shifts.replace(",", " ").split() if x]
@@ -273,10 +291,11 @@ def write_set_file(job_dir: Path, payload: SpectrumRequest) -> Path:
     return set_path
 
 
-def run_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess:
+def run_command(command: list[str], cwd: Path, env: Optional[dict] = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         command,
         cwd=str(cwd),
+        env=env,
         capture_output=True,
         text=True,
         timeout=JOB_TIMEOUT_SECONDS,
@@ -291,15 +310,36 @@ def make_graph_symlink(job_dir: Path) -> None:
     link_path.symlink_to(GRAPH_BIN)
 
 
+def make_group_graph_symlink(job_dir: Path) -> None:
+    link_path = job_dir / "group_graph"
+    if not link_path.exists() and not link_path.is_symlink():
+        link_path.symlink_to(GROUP_GRAPH_BIN)
+
+
+def observer_environment(payload: SpectrumRequest) -> Optional[dict]:
+    if not payload.observer_groups:
+        return None
+    env = os.environ.copy()
+    env["SPINSPEC_OBSERVER_GROUPS"] = ",".join(
+        payload.observer_groups.replace(",", " ").split()
+    )
+    env["OMP_NUM_THREADS"] = "1"
+    return env
+
+
 def collect_output(job_dir: Path) -> dict:
     image = job_dir / "data_00000.jpg"
     spectrum = job_dir / "Sp_00000.dat"
+    group_image = job_dir / "group_spectrum_00000.jpg"
+    invariant = job_dir / "Sp_invariant_00000.csv"
 
     result_candidates = sorted(job_dir.glob("Res_*_00000.dat"))
     result_file = result_candidates[0] if result_candidates else None
 
     return {
         "image": image if image.exists() else None,
+        "group_image": group_image if group_image.exists() else None,
+        "invariant": invariant if invariant.exists() else None,
         "spectrum": spectrum if spectrum.exists() else None,
         "result": result_file if result_file and result_file.exists() else None,
     }
@@ -315,6 +355,14 @@ def build_response(job_dir: Path, message: str) -> JobResult:
         image_url=f"/jobs/{job_id}/data_00000.jpg" if output["image"] else None,
         spectrum_url=f"/jobs/{job_id}/Sp_00000.dat" if output["spectrum"] else None,
         result_url=f"/jobs/{job_id}/{output['result'].name}" if output["result"] else None,
+        group_image_url=(
+            f"/jobs/{job_id}/group_spectrum_00000.jpg"
+            if output["group_image"] else None
+        ),
+        group_spectrum_url=(
+            f"/jobs/{job_id}/Sp_invariant_00000.csv"
+            if output["invariant"] else None
+        ),
         message=message,
     )
 
@@ -411,14 +459,21 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
     try:
         set_path = write_set_file(job_dir, payload)
         make_graph_symlink(job_dir)
+        if payload.observer_groups:
+            make_group_graph_symlink(job_dir)
 
-        process = run_command([str(ENGINE_BIN), set_path.name], cwd=job_dir)
+        process = run_command([str(ENGINE_BIN), set_path.name], cwd=job_dir,
+                              env=observer_environment(payload))
         if process.returncode != 0:
             raise failed_process_response(process, "engine_matrix")
 
         response = build_response(job_dir, "Calculation completed.")
         if response.image_url is None:
             raise HTTPException(status_code=500, detail="Calculation completed without final image.")
+        if payload.observer_groups and not response.group_image_url:
+            raise HTTPException(
+                status_code=500, detail="Group-resolved plot not generated."
+            )
         audit_event("calculate", ip, {
             "spins": spin_count,
             "title": payload.title,
@@ -427,6 +482,7 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
             "nuclei": infer_nuclei_from_gammas(payload.gammas),
             "field_mT": payload.field,
             "linewidths": payload.linewidths,
+            "observer_groups": payload.observer_groups,
             "job_id": job_dir.name,
         })
             
