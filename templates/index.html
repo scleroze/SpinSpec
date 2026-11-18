@@ -694,6 +694,9 @@
       document.getElementById('gammas').value = lines[1] ?? '';
       document.getElementById('shifts').value = lines[2] ?? '';
       document.getElementById('field').value = lines[3] ?? '';
+      // Group assignments are separate from the historic .set format.
+      // Clear them when loading a new model to avoid mismatched spin counts.
+      document.getElementById('observerGroups').value = '';
 
       let i = 4;
       const jLines = [];
