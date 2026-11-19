@@ -1,4 +1,7 @@
 import json
+import csv
+import math
+import tempfile
 import hmac
 import os
 import shutil
@@ -91,6 +94,7 @@ class JobResult(BaseModel):
     set_filename: str
     image_url: Optional[str] = None
     spectrum_url: Optional[str] = None
+    spectrum_csv_url: Optional[str] = None
     result_url: Optional[str] = None
     group_image_url: Optional[str] = None
     group_spectrum_url: Optional[str] = None
@@ -148,6 +152,18 @@ def read_tutorial(request: Request) -> HTMLResponse:
     audit_event("tutorial_open", ip, {})
     return HTMLResponse((STATIC_DIR / "tutorial.html").read_text(encoding="utf-8"))
 
+# SPINSPEC_DOCS_NAV_V11
+@app.get("/about", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/about/", response_class=HTMLResponse, include_in_schema=False)
+def about_en_page() -> HTMLResponse:
+    return HTMLResponse((TEMPLATES_DIR / "about_en.html").read_text(encoding="utf-8"))
+
+@app.get("/tr", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/tr/", response_class=HTMLResponse, include_in_schema=False)
+def about_tr_page() -> HTMLResponse:
+    return HTMLResponse((TEMPLATES_DIR / "about_tr.html").read_text(encoding="utf-8"))
+
+
 @app.get("/dev-spectrum", response_class=HTMLResponse)
 def read_dev_spectrum(request: Request) -> HTMLResponse:
     return HTMLResponse((TEMPLATES_DIR / "dev_spectrum.html").read_text(encoding="utf-8"))
@@ -159,14 +175,33 @@ def healthcheck() -> dict:
 
 @app.get("/api/examples")
 def list_examples() -> dict:
-    examples = []
+    # SPINSPEC_CLASSIFIED_EXAMPLE_CATALOG
+    import json as _catalog_json
+    catalog_file = EXAMPLES_DIR / "catalog.json"
+    known = {}
+    groups = []
+    if catalog_file.exists():
+        catalog = _catalog_json.loads(catalog_file.read_text(encoding="utf-8"))
+        for group in catalog.get("groups", []):
+            group_name = str(group.get("category", "Other"))
+            groups.append(group_name)
+            for entry in group.get("items", []):
+                known[entry["filename"]] = {
+                    "filename": entry["filename"],
+                    "label": entry["label"],
+                    "category": group_name,
+                    "model": entry.get("model", "reference"),
+                }
+    examples = [known[name] for name in known
+                if (EXAMPLES_DIR / name).is_file()]
     for path in sorted(EXAMPLES_DIR.glob("*.set")):
-        examples.append(
-            {
+        if path.name not in known:
+            examples.append({
                 "filename": path.name,
                 "label": path.stem.replace("_", " ").title(),
-            }
-        )
+                "category": "Other examples",
+                "model": "reference",
+            })
     return {"examples": examples}
 
 
@@ -261,7 +296,37 @@ def normalize_jcouplings(s: str) -> str:
             lines.append(line)
     return "\n".join(lines)
 
+# SPINSPEC_AUTO_GROUP_WINDOWS_V1
+# The numerical engine still includes ALL spins. Only the Graph display windows
+# change in group mode. The user's manual Graph settings remain unchanged in
+# ordinary mode and in the form's Save set function.
+def observer_group_graph_layout(payload: SpectrumRequest) -> tuple[str, str]:
+    if not payload.observer_groups:
+        return payload.graph, payload.heights
+
+    group_ids = [int(v) for v in payload.observer_groups.replace(",", " ").split()]
+    first_spin_for_group = {}
+    for spin, group_id in enumerate(group_ids):
+        first_spin_for_group.setdefault(group_id, spin)
+
+    # Sorted group IDs; one representative spin per nonempty group.
+    representatives = [first_spin_for_group[g] for g in sorted(first_spin_for_group)]
+    original_spins = payload.graph.replace(",", " ").split()
+    original_heights = payload.heights.replace(",", " ").split()
+    fallback_height = original_heights[0] if original_heights else "1.0"
+    height_by_spin = {}
+    for pos, token in enumerate(original_spins):
+        if pos < len(original_heights) and token.isdecimal():
+            height_by_spin[int(token)] = original_heights[pos]
+
+    return (
+        " ".join(str(spin) for spin in representatives),
+        " ".join(height_by_spin.get(spin, fallback_height) for spin in representatives),
+    )
+
+
 def build_set_content(payload: SpectrumRequest) -> str:
+    group_graph, group_heights = observer_group_graph_layout(payload)
     return "\n".join(
         [
             sanitize_title(payload.title),
@@ -270,8 +335,8 @@ def build_set_content(payload: SpectrumRequest) -> str:
             normalize_spaces(payload.field),
             normalize_jcouplings(payload.jcouplings),
             "",
-            f"Graph {payload.graph}",
-            payload.heights,
+            f"Graph {group_graph}",
+            group_heights,
             payload.linewidths,
             "",
         ]
@@ -327,6 +392,49 @@ def observer_environment(payload: SpectrumRequest) -> Optional[dict]:
     return env
 
 
+# SPINSPEC_CSV_EXPORT_V1
+# Export the legacy eigenstate-pair spectrum as self-documenting CSV.
+# The legacy Sp_*.dat sixth column is a product-basis lookup, NOT a
+# physical eigenstate-transition label, and is intentionally excluded.
+def ensure_ordinary_csv(job_dir: Path) -> Optional[Path]:
+    original = job_dir / "Sp_00000.dat"
+    destination = job_dir / "Sp_transitions_00000.csv"
+    if not original.is_file():
+        return None
+    if destination.is_file():
+        return destination
+
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", suffix=".csv.tmp",
+            prefix="SpinSpec_export_", dir=job_dir, delete=False
+        ) as out_file:
+            temporary = Path(out_file.name)
+            writer = csv.writer(out_file)
+            writer.writerow(("state_i", "state_j", "frequency_hz", "relative_strength"))
+            with original.open("r", encoding="utf-8") as source:
+                next(source)  # six-column engine header: n, x1, x2, i, j, I
+                for line_number, line in enumerate(source, start=2):
+                    if not line.strip():
+                        continue
+                    fields = line.split()
+                    if len(fields) != 6:
+                        raise ValueError(f"Invalid Sp data at line {line_number}: expected six columns")
+                    frequency, strength = float(fields[1]), float(fields[2])
+                    state_i, state_j = int(fields[3]), int(fields[4])
+                    if (not math.isfinite(frequency) or not math.isfinite(strength)
+                        or frequency < 0 or strength < -1e-10
+                        or state_i < 1 or state_j <= state_i):
+                        raise ValueError(f"Invalid transition values at line {line_number}")
+                    writer.writerow((state_i, state_j, fields[1], fields[2]))
+        temporary.replace(destination)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
+    return destination
+
+
 def collect_output(job_dir: Path) -> dict:
     image = job_dir / "data_00000.jpg"
     spectrum = job_dir / "Sp_00000.dat"
@@ -346,6 +454,7 @@ def collect_output(job_dir: Path) -> dict:
 
 
 def build_response(job_dir: Path, message: str) -> JobResult:
+    ordinary_csv = ensure_ordinary_csv(job_dir)
     output = collect_output(job_dir)
     job_id = job_dir.name
 
@@ -354,6 +463,7 @@ def build_response(job_dir: Path, message: str) -> JobResult:
         set_filename="input.set",
         image_url=f"/jobs/{job_id}/data_00000.jpg" if output["image"] else None,
         spectrum_url=f"/jobs/{job_id}/Sp_00000.dat" if output["spectrum"] else None,
+        spectrum_csv_url=f"/jobs/{job_id}/Sp_transitions_00000.csv" if ordinary_csv else None,
         result_url=f"/jobs/{job_id}/{output['result'].name}" if output["result"] else None,
         group_image_url=(
             f"/jobs/{job_id}/group_spectrum_00000.jpg"
@@ -791,6 +901,13 @@ def robots_txt():
 @app.get("/sitemap.xml")
 def sitemap_xml():
     return FileResponse(STATIC_DIR / "sitemap.xml", media_type="application/xml")
+
+@app.get("/yandex_03783da657843245.html", include_in_schema=False)
+def yandex_verification():
+    return FileResponse(
+        STATIC_DIR / "yandex_03783da657843245.html",
+        media_type="text/html"
+    )
 
 if __name__ == "__main__":
     import uvicorn
