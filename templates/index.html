@@ -348,17 +348,85 @@
   flex-direction: column;
   align-items: stretch;
 }
+
+/* SPINSPEC_FIXED_LAYOUT: validated on desktop, left panel 460px */
+@media (min-width: 1101px) {
+  .page {
+    grid-template-columns: 460px minmax(0, 1fr);
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .left-panel {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .right-panel {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+/* SPINSPEC_GROUP_SELECTOR: only UI; no changes to physics engine */
+.spin-group-options {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+}
+.spin-group-options[hidden] { display: none !important; }
+.spin-group-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.spin-group-actions button { padding: 7px 9px; font-size: 12px; }
+.spin-group-rows { display: grid; gap: 6px; }
+.spin-group-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 4px 0 8px;
+}
+.spin-group-row:last-child { border-bottom: 0; }
+.spin-group-row label { font-size: 12px; font-weight: 400; overflow-wrap: anywhere; }
+.spin-group-row select { font-size: 12px; padding: 6px; border-radius: 7px; }
+.spin-group-toggle input[type="checkbox"] { width: auto; flex: none; }
+.spin-group-summary { font-size: 12px; color: #334155; line-height: 1.45; overflow-wrap: anywhere; }
+.spin-group-warning { font-size: 12px; color: #9a3412; line-height: 1.4; }
+.spin-group-advanced summary { font-size: 12px; cursor: pointer; }
+.spin-group-advanced label { display: block; margin: 8px 0 4px; font-size: 12px; }
+.spin-group-advanced input { font-family: Consolas, monospace; }
+/* SPINSPEC_GROUP_GRAPH_FIX */
+.preview-box { flex: 0 0 auto; overflow: visible; justify-content: flex-start; }
+#groupPreviewImage { display: block; max-height: none; }
+/* SPINSPEC_CSV_EXPORT_V1: compact, optional data export */
+#groupCsvLink { display: none !important; } /* replaced by one shared export area */
+.export-data { width: 100%; box-sizing: border-box; margin: 14px 0 2px;
+               padding: 12px 14px; border: 1px solid #d8dee6;
+               border-radius: 9px; background: #fff; font-size: 14px; }
+.export-data[hidden] { display: none !important; }
+.export-data summary { cursor: pointer; font-weight: 600; }
+.export-data a { display: inline-block; margin: 10px 14px 4px 0; }
+.export-data p { margin: 8px 0 0; font-size: 12px; color: #475569; line-height: 1.5; }
 </style>
 </head>
 <body>
   <div class="page">
     <section class="panel left-panel">
-      <nav aria-label="Language" style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;font-size:13px;align-items:center;">
-        <span lang="en" aria-current="page" style="font-weight:700;color:#1d4ed8;">EN</span>
-        <span aria-hidden="true" style="color:#94a3b8;">|</span>
-        <a href="/ru" lang="ru" hreflang="ru" style="font-weight:700;">RU · Русский</a>
+      <!-- SPINSPEC_DOCS_NAV_V11: documentation links, not UI language selector -->
+      <nav aria-label="SpinSpec documentation" style="display:flex;flex-wrap:wrap;align-items:center;gap:9px 13px;margin-bottom:12px;font-size:13px;padding:8px 10px;background:#edf4ff;border:1px solid #d8dee6;border-radius:9px">
+        <strong style="font-weight:700;color:#1f2937">About:</strong>
+        <a href="/about" title="Software description in English">EN</a>
+        <a href="/ru" lang="ru" title="Описание программы по-русски">RU</a>
+        <a href="/tr" lang="tr" title="Türkçe yazılım tanıtımı">TR</a>
+        <span style="color:#94a3b8" aria-hidden="true">|</span>
+        <a href="/tutorial" title="Illustrated guide in English">Tutorial</a>
       </nav>
-      <h1>SpinSpec</h1>
+      <h1 style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#1c3558">Spin<span style="color:#2563eb">Spec</span></h1>
       <p class="subtitle">Hamiltonian-based NMR spectrum modeling</p>
       
       <form id="nmrForm" class="form-grid">
@@ -433,16 +501,36 @@
           <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
         </div>
 
-        <div class="field">
-          <label for="observerGroups">Group-resolved spectrum (optional)</label>
-          <input id="observerGroups" name="observerGroups" type="text"
-                 placeholder="For 3 protons + 31P: 0 0 0 1" />
+        <div class="field" id="spinGroupField">
+          <label>Group-resolved spectrum (optional)</label>
+          <label class="check-row spin-group-toggle">
+            <input id="enableGroupSpectrum" type="checkbox" />
+            Calculate contributions of spin groups
+          </label>
           <div class="hint">
-            One group ID per spin (0–9), in nucleus order.
-            Produces a separate Gnuplot chart for total, groups and
-            signed interference. The 0 Hz component remains in the CSV,
-            not in the dynamic spectrum plot. Relative strengths, not
-            calibrated experimental amplitudes.
+            Group suggestions come from gyromagnetic ratios, chemical shifts,
+            and J-coupling patterns. These are observer groups, not a proof of
+            strict magnetic equivalence.
+          </div>
+          <div id="spinGroupOptions" class="spin-group-options" hidden>
+            <div class="spin-group-actions">
+              <button type="button" id="autoDetectGroups" class="secondary">Auto-detect groups</button>
+              <button type="button" id="separateSpinGroups" class="secondary">Separate all spins</button>
+            </div>
+            <div id="spinGroupRows" class="spin-group-rows"></div>
+            <div id="spinGroupSummary" class="spin-group-summary" aria-live="polite"></div>
+            <div id="spinGroupWarning" class="spin-group-warning" role="status"></div>
+            <details class="spin-group-advanced">
+              <summary>Advanced: edit group IDs</summary>
+              <label for="observerGroups">One group ID (0–9) per spin, in order</label>
+              <input id="observerGroups" name="observerGroups" type="text"
+                     autocomplete="off" placeholder="0 0 0 1" />
+            </details>
+          </div>
+          <div class="hint">
+            A separate Gnuplot image shows total, group contributions and signed
+            interference. Zero-frequency terms remain in the CSV. Intensities
+            are relative, not experimentally calibrated.
           </div>
         </div>
 
@@ -498,9 +586,24 @@
     <a id="groupCsvLink" href="#" download>Download invariant transition strengths (CSV)</a>
   </div>
 
-  <div id="placeholder" class="placeholder">
+    <!-- SPINSPEC_CSV_EXPORT_V1: one link for the mode selected at calculation -->
+  <details id="exportData" class="export-data" hidden>
+    <summary>Export numerical transition data (CSV)</summary>
+    <a id="exportDataLink" href="#" download>Download transition data (CSV)</a>
+    <a href="/tutorial#data-export" target="_blank" rel="noopener noreferrer">Column descriptions and units</a>
+    <p id="exportDataNote"></p>
+  </details>
 
-    <h2>Online NMR Spectrum Simulation</h2>
+<div id="placeholder" class="placeholder">
+
+    <div style="border:1px solid #c7d8f5;background:#eff6ff;border-radius:12px;padding:14px 18px;margin-bottom:20px;text-align:left">
+        <strong style="color:#1d4ed8">SpinSpec 1.1 · November 2026</strong>
+        <p style="margin:7px 0 6px">New: spin-group spectra with signed interference; automatic group windows; downloadable transition tables (CSV); organized molecular examples and improved layout.</p>
+        <a href="/about">What's new and how it works</a> ·
+        <a href="/ru">Описание по-русски</a> ·
+        <a href="/tr">Türkçe açıklama</a>
+      </div>
+      <h2>Online NMR Spectrum Simulation</h2>
 
       <p>
         SpinSpec is an online NMR spectrum simulator for interactive visualization 
@@ -527,7 +630,7 @@
       </p>
 
       <p>
-        <a href="https://nmrspec.org/tutorial" target="_blank">Tutorial page</a>, <a href="https://youtu.be/JQFtuEWrhkE?si=jWJoGrVBAAB_gP4v" target="_blank">Tutorial videos</a> and example datasets are available to help new users quickly
+        <a href="/tutorial" target="_blank">Tutorial page</a>, <a href="https://youtu.be/JQFtuEWrhkE?si=jWJoGrVBAAB_gP4v" target="_blank">Tutorial videos</a> and example datasets are available to help new users quickly
         understand the interface and reproduce experimental spectra.
       </p>
 
@@ -648,7 +751,7 @@
         graph: document.getElementById('graph').value.trim(),
         heights: document.getElementById('heights').value.trim(),
         linewidths: document.getElementById('linewidths').value.trim(),
-        observer_groups: document.getElementById('observerGroups').value.trim(),
+        observer_groups: getSelectedObserverGroups(),
       };
     }
 
@@ -697,6 +800,7 @@
       // Group assignments are separate from the historic .set format.
       // Clear them when loading a new model to avoid mismatched spin counts.
       document.getElementById('observerGroups').value = '';
+      manualSpinGroupOverride = false;
 
       let i = 4;
       const jLines = [];
@@ -712,6 +816,7 @@
         document.getElementById('heights').value = lines[i + 1] ?? '';
         document.getElementById('linewidths').value = lines[i + 2] ?? '';
       }
+      proposeSpinGroups();
     }
 
     function downloadSetFile() {
@@ -758,15 +863,58 @@
       return response.json();
     }
 
+    let latestSpectrumResult = null;
+    const missingGroupText =
+      'Group spectrum not calculated. Enable groups and press Calculate spectrum.';
+
     function updateGroupPreview(result) {
+      window.spinspecLastExportResult = result || null;
+      if (typeof window.spinspecUpdateExport === 'function')
+        window.spinspecUpdateExport(result);
+      latestSpectrumResult = result || null;
+
+      const grouped =
+        document.getElementById('enableGroupSpectrum').checked;
+
       const wrapper = document.getElementById('groupResult');
-      if (!result || !result.group_image_url || !result.group_spectrum_url) {
-        wrapper.style.display = 'none';
+      const groupImage = document.getElementById('groupPreviewImage');
+      const interactive = document.getElementById('interactiveButton');
+
+      wrapper.style.display = 'none';
+      groupImage.style.display = 'none';
+
+      previewImage.style.display =
+        (!grouped && result && result.image_url) ? 'block' : 'none';
+
+      interactive.style.display =
+        (!grouped && result && result.job_id && result.spectrum_url)
+          ? 'inline-block' : 'none';
+
+      if (!grouped) {
+        if (document.getElementById('resultMessage').textContent
+            === missingGroupText) showMessage('');
         return;
       }
-      document.getElementById('groupPreviewImage').src = result.group_image_url;
-      document.getElementById('groupCsvLink').href = result.group_spectrum_url;
+
+      if (!result || !result.group_image_url ||
+          !result.group_spectrum_url) {
+        if (result) {
+          placeholder.style.display = 'none';
+          showMessage(missingGroupText, true);
+        }
+        return;
+      }
+
+      groupImage.src = result.group_image_url;
+      groupImage.style.display = 'block';
+      document.getElementById('groupCsvLink').href =
+        result.group_spectrum_url;
+
+      placeholder.style.display = 'none';
       wrapper.style.display = 'block';
+
+      if (document.getElementById('resultMessage').textContent
+          === missingGroupText) showMessage('');
     }
 
     function updatePreview(imageUrl, fileLabel = null) {
@@ -787,11 +935,24 @@
         }
 
         const data = await response.json();
+// SPINSPEC_CLASSIFIED_EXAMPLE_CATALOG
+        const sections = new Map();
         for (const example of data.examples || []) {
+          const category = example.category || 'Other examples';
+          let section = sections.get(category);
+          if (!section) {
+            section = document.createElement('optgroup');
+            section.label = category;
+            sections.set(category, section);
+            exampleSelect.appendChild(section);
+          }
           const option = document.createElement('option');
           option.value = example.filename;
-          option.textContent = example.label;
-          exampleSelect.appendChild(option);
+          option.textContent = example.label + (example.model === 'illustrative' ? ' [illustrative]' : (example.model === 'reduced' ? ' [reduced]' : ''));
+          if (example.model === 'illustrative' || example.model === 'reduced') {
+            option.title = 'Simplified / illustrative J-coupling model';
+          }
+          section.appendChild(option);
         }
       } catch (error) {
         setStatus(`Failed to load example list: ${error.message}`, 'error');
@@ -907,7 +1068,270 @@
         }
     });
 
+
+    // Spin groups decompose the observation operator; they need not be
+    // strictly magnetically equivalent. Proposal uses J-neighborhood profiles.
+    const groupEnabled = document.getElementById('enableGroupSpectrum');
+    const groupOptions = document.getElementById('spinGroupOptions');
+    const groupTextInput = document.getElementById('observerGroups');
+    const groupRows = document.getElementById('spinGroupRows');
+    const groupSummary = document.getElementById('spinGroupSummary');
+    const groupWarning = document.getElementById('spinGroupWarning');
+    let manualSpinGroupOverride = false;
+    let groupChangeTimer = null;
+
+    function parseNumericList(text, name) {
+      const tokens = text.replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean);
+      if (!tokens.length) throw new Error(`${name} is empty.`);
+      const values = tokens.map(Number);
+      if (values.some(x => !Number.isFinite(x))) throw new Error(`Invalid ${name}.`);
+      return values;
+    }
+
+    function getSpinModel() {
+      const gammas = parseNumericList(document.getElementById('gammas').value, 'gyromagnetic ratios');
+      const shifts = parseNumericList(document.getElementById('shifts').value, 'chemical shifts');
+      const n = gammas.length;
+      if (n !== shifts.length) throw new Error('The number of shifts must equal the number of spins.');
+      if (n > 8) throw new Error('The web service supports up to 8 spins.');
+      const J = Array.from({ length: n }, () => Array(n).fill(0));
+      const seen = new Set();
+      const lines = document.getElementById('jcouplings').value.replace(/\r/g, '').split('\n');
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line || line.startsWith('#')) continue;
+        const parts = line.replace(/,/g, ' ').split(/\s+/);
+        if (parts.length !== 3) throw new Error(`Invalid J-coupling row: "${line}".`);
+        const [a, b, v] = parts.map(Number);
+        if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n || a === b || !Number.isFinite(v)) {
+          throw new Error(`Invalid J-coupling indices or value: "${line}".`);
+        }
+        const key = `${Math.min(a,b)}:${Math.max(a,b)}`;
+        if (seen.has(key) && Math.abs(J[a][b] - v) > 1e-3) {
+          throw new Error(`Conflicting J-coupling for pair ${a}–${b}.`);
+        }
+        seen.add(key);
+        J[a][b] = J[b][a] = v;
+      }
+      return { n, gammas, shifts, J };
+    }
+
+    function sameJProfile(a, b, groups, J) {
+      const classes = [...new Set(groups)];
+      for (const cls of classes) {
+        const left = [], right = [];
+        for (let k = 0; k < groups.length; k++) {
+          if (groups[k] !== cls) continue;
+          if (k !== a) left.push(J[a][k]);
+          if (k !== b) right.push(J[b][k]);
+        }
+        if (left.length !== right.length) return false;
+        left.sort((x,y) => x-y);
+        right.sort((x,y) => x-y);
+        for (let k=0; k<left.length; k++) {
+          if (Math.abs(left[k]-right[k]) > 0.001) return false;
+        }
+      }
+      return true;
+    }
+
+    function suggestGroups(model) {
+      const { n, gammas, shifts, J } = model;
+      // Initial grouping: same approximate isotope and chemical shift.
+      let groups = Array(n).fill(-1);
+      let count = 0;
+      for (let i=0; i<n; i++) {
+        let matched = -1;
+        for (let j=0; j<i; j++) {
+          if (Math.abs(gammas[i]-gammas[j]) < 0.01 &&
+              Math.abs(shifts[i]-shifts[j]) < 0.001) {
+            matched = groups[j];
+            break;
+          }
+        }
+        groups[i] = matched < 0 ? count++ : matched;
+      }
+      // Refine candidate sets by comparing multisets of scalar couplings to
+      // each current candidate group; do not claim exact magnetic equivalence.
+      for (let iter=0; iter<n; iter++) {
+        const next = Array(n).fill(-1);
+        let nextId = 0;
+        for (let i=0; i<n; i++) {
+          let matched = -1;
+          for (let j=0; j<i; j++) {
+            if (groups[i] === groups[j] && sameJProfile(i,j,groups,J)) {
+              matched = next[j];
+              break;
+            }
+          }
+          next[i] = matched < 0 ? nextId++ : matched;
+        }
+        if (next.every((v, i) => v === groups[i])) break;
+        groups = next;
+      }
+      return groups;
+    }
+
+    function isotopeHint(gamma) {
+      const nuclei = [
+        ['¹H', 42.57748], ['¹³C', 10.7084], ['¹⁵N', -4.316],
+        ['¹⁹F', 40.053], ['²⁹Si', -8.465], ['³¹P', 17.235]
+      ];
+      const match = nuclei.find(([, ref]) => Math.abs(gamma-ref) < 0.025);
+      return match ? match[0] : 'γ';
+    }
+
+    function readGroupIds(n) {
+      const parts = groupTextInput.value.replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean);
+      if (parts.length !== n || parts.some(v => !/^[0-9]$/.test(v))) return null;
+      return parts.map(Number);
+    }
+
+    function summarizeGroups(ids) {
+      const grouped = new Map();
+      ids.forEach((g, i) => {
+        if (!grouped.has(g)) grouped.set(g, []);
+        grouped.get(g).push(i);
+      });
+      groupSummary.textContent = [...grouped.entries()]
+        .map(([g, spins]) => `Group ${g}: spins ${spins.join(', ')}`).join(' · ');
+    }
+
+    function renderGroupRows(ids, model) {
+      groupRows.replaceChildren();
+      const { gammas, shifts } = model;
+      ids.forEach((groupId, i) => {
+        const row = document.createElement('div');
+        row.className = 'spin-group-row';
+        const label = document.createElement('label');
+        label.textContent = `Spin ${i}: ${isotopeHint(gammas[i])} (${gammas[i]} MHz/T, ${shifts[i]} ppm)`;
+        label.htmlFor = `spinGroupSelect${i}`;
+        const select = document.createElement('select');
+        select.id = `spinGroupSelect${i}`;
+        select.dataset.spin = String(i);
+        select.setAttribute('aria-label', `Group for spin ${i}`);
+        for (let g=0; g<10; g++) {
+          const option = document.createElement('option');
+          option.value = String(g);
+          option.textContent = `Group ${g}`;
+          option.selected = (g === groupId);
+          select.appendChild(option);
+        }
+        select.addEventListener('change', () => {
+          const values = [...groupRows.querySelectorAll('select')].map(el => Number(el.value));
+          groupTextInput.value = values.join(' ');
+          manualSpinGroupOverride = true;
+          groupWarning.textContent = '';
+          summarizeGroups(values);
+        });
+        row.append(label, select);
+        groupRows.appendChild(row);
+      });
+      summarizeGroups(ids);
+      groupWarning.textContent = '';
+    }
+
+    function proposeSpinGroups() {
+      try {
+        const model = getSpinModel();
+        if (manualSpinGroupOverride) {
+          const existing = readGroupIds(model.n);
+          if (existing) {
+            renderGroupRows(existing, model);
+            groupWarning.textContent = 'Manual grouping retained. Click Auto-detect to recalculate after changing model parameters.';
+            return;
+          }
+          manualSpinGroupOverride = false;
+        }
+        const ids = suggestGroups(model);
+        groupTextInput.value = ids.join(' ');
+        renderGroupRows(ids, model);
+      } catch (error) {
+        groupRows.replaceChildren();
+        groupSummary.textContent = '';
+        groupTextInput.value = '';
+        groupWarning.textContent = error.message;
+      }
+    }
+
+    function getSelectedObserverGroups() {
+      if (!groupEnabled.checked) return '';
+      const model = getSpinModel();
+      const ids = readGroupIds(model.n);
+      if (!ids) throw new Error(`Select one group ID (0–9) for each of the ${model.n} spins.`);
+      return ids.join(' ');
+    }
+
+    groupEnabled.addEventListener('change', () => {
+      groupOptions.hidden = !groupEnabled.checked;
+      if (groupEnabled.checked) proposeSpinGroups();
+      if (latestSpectrumResult)
+        updateGroupPreview(latestSpectrumResult);
+    });
+    document.getElementById('autoDetectGroups').addEventListener('click', () => {
+      manualSpinGroupOverride = false;
+      proposeSpinGroups();
+    });
+    document.getElementById('separateSpinGroups').addEventListener('click', () => {
+      try {
+        const model = getSpinModel();
+        const ids = Array.from({length: model.n}, (_, i) => i);
+        groupTextInput.value = ids.join(' ');
+        manualSpinGroupOverride = true;
+        renderGroupRows(ids, model);
+      } catch (error) {
+        groupWarning.textContent = error.message;
+      }
+    });
+    groupTextInput.addEventListener('input', () => {
+      try {
+        const model = getSpinModel();
+        const ids = readGroupIds(model.n);
+        if (!ids) {
+          groupWarning.textContent = `Enter exactly ${model.n} group IDs from 0 to 9.`;
+          return;
+        }
+        manualSpinGroupOverride = true;
+        renderGroupRows(ids, model);
+      } catch (error) {
+        groupWarning.textContent = error.message;
+      }
+    });
+    ['gammas', 'shifts', 'jcouplings'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => {
+        clearTimeout(groupChangeTimer);
+        groupChangeTimer = setTimeout(proposeSpinGroups, 250);
+      });
+    });
+    proposeSpinGroups();
+
     loadExamples();
   </script>
+<script id="spinspec-csv-export">
+// SPINSPEC_CSV_EXPORT_V1. The exported file follows the selected calculation mode.
+(function () {
+  const panel = document.getElementById('exportData');
+  const link = document.getElementById('exportDataLink');
+  const note = document.getElementById('exportDataNote');
+  const toggle = document.getElementById('enableGroupSpectrum');
+  window.spinspecUpdateExport = function (result) {
+    const grouped = toggle.checked;
+    const url = result && (grouped ? result.group_spectrum_url : result.spectrum_csv_url);
+    panel.hidden = !url;
+    if (!url) return;
+    link.href = url;
+    link.download = grouped ? 'Sp_invariant_00000.csv' : 'Sp_transitions_00000.csv';
+    link.textContent = grouped
+      ? 'Download group transition data (CSV)'
+      : 'Download ordinary transition data (CSV)';
+    note.textContent = grouped
+      ? 'Energy-block transitions: total strength, group strengths and signed interference. DC rows are included.'
+      : 'Eigenstate-pair transitions: frequencies and legacy relative strengths. Values are unbroadened.';
+  };
+  toggle.addEventListener('change', function () {
+    window.spinspecUpdateExport(window.spinspecLastExportResult);
+  });
+})();
+</script>
 </body>
 </html>
