@@ -72,7 +72,7 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   fprintf(gp, "set border 0\n");
   fprintf(gp, "set ytics\n");
   fprintf(gp, "unset xrange\n"); 
-  fprintf(gp, "set xtics 2\n");
+  fprintf(gp, "set xtics autofreq\n");
 /*
  * Stack Sg lower panels. Vertical maxima are fixed by V_size[], as read
  * from the .set file. Curves are not independently normalized here.
@@ -100,6 +100,24 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
      exit(EXIT_FAILURE);
    }
 printf("parameters: sigma=%lf, freq=%lf", sigma, freq);
+
+   /* Find maximum intensity of the current spectrum. */
+   double intensity_max = 0.0;
+   char scanline[512];
+
+   while (fgets(scanline, sizeof(scanline), fsi)) {
+       double x, y;
+       if (sscanf(scanline, "%lf %lf", &x, &y) == 2) {
+           if (y > intensity_max) intensity_max = y;
+       }
+   }
+   fclose(fsi);
+
+   /* Zero means automatic height; positive values remain manual. */
+   double y_limit = (V_size[i] > 0.0)
+       ? V_size[i]
+       : (intensity_max > 0.0 ? intensity_max * 1.08 : 1.0);
+
 //--------------------------------------------------------------------------
    double origin_y = h * (Sg-i-1);
    fprintf(gp, "set origin 0,%lf\n", origin_y); // position this subplot
@@ -108,13 +126,13 @@ printf("parameters: sigma=%lf, freq=%lf", sigma, freq);
    fprintf(gp, "set ytics nomirror\n");
    H_Sg = Hs*(Sg-i-1)+Hs*Shift_H-0.05; // position the chemical-shift annotation
    printf("\n%i Y range %f\n",i , V_size[i]);
-   fprintf(gp, "set yrange [0:%lf]\n", V_size[i]);
+   fprintf(gp, "set yrange [0:%lf]\n", y_limit);
    fprintf(gp, "set label \"Spin %i\" at screen 0.07, %f offset 0, 0 font \",16\"\n", Sgm[i], H_Sg+0.03);
    fprintf(gp, "set label \"NMR frequency %.5f Hz\" at screen 0.7, %f offset 0, 0 font \",16\"\n", freq, H_Sg);   
    Sigma_Hz = freq*sigma*1e-6;
    fprintf(gp, "set label \"σ = %.2f ppm (%.5lf Hz)\" at screen 0.07, %f offset 0, 0 font \",16\"\n",sigma, Sigma_Hz, H_Sg);
    printf("%i Sgm %i\n", i, Sgm[i]);
-   fprintf(gp, "set yrange [0:%lf]\n", V_size[i]);
+   fprintf(gp, "set yrange [0:%lf]\n", y_limit);
    fprintf(gp, "plot \"Res_%i_%05d.dat\" skip 1 with l lt %i lw 2\n", Sgm[i], Bc, Color[i]);
    fprintf(gp, "unset label\n");
 }
