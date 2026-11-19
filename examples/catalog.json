@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "notes": "Entries marked illustrative or reduced use partial J-coupling networks. Numerical J values for the ten newly added models require independent source verification before using them as literature-validated reference data. Any unset chemical shifts are placeholders (0 ppm).",
+  "groups": [
+    {
+      "category": "Basic spin systems",
+      "items": [
+        {
+          "filename": "two_spins.set",
+          "label": "Two coupled spins (¹H–³¹P)",
+          "model": "reference"
+        },
+        {
+          "filename": "three_spins.set",
+          "label": "Three coupled spins (¹H₂–³¹P)",
+          "model": "reference"
+        }
+      ]
+    },
+    {
+      "category": "Fluorinated organic compounds",
+      "items": [
+        {
+          "filename": "fluoromethane.set",
+          "label": "Fluoromethane — CH₃F",
+          "model": "illustrative"
+        },
+        {
+          "filename": "difluoromethane.set",
+          "label": "Difluoromethane — CH₂F₂",
+          "model": "illustrative"
+        },
+        {
+          "filename": "trifluoromethane.set",
+          "label": "Trifluoromethane — CHF₃",
+          "model": "illustrative"
+        },
+        {
+          "filename": "fluoroethane.set",
+          "label": "Fluoroethane — CH₃CH₂F",
+          "model": "illustrative"
+        },
+        {
+          "filename": "fluorobenzene_HF_only.set",
+          "label": "Fluorobenzene — H–F couplings only",
+          "model": "reduced"
+        },
+        {
+          "filename": "2_2_2_TriFluoro_Ethanol.set",
+          "label": "2,2,2-Trifluoroethanol",
+          "model": "reference"
+        },
+        {
+          "filename": "2_2_3_3_TetraFluoro_1-Propanol.set",
+          "label": "2,2,3,3-Tetrafluoro-1-propanol",
+          "model": "reference"
+        },
+        {
+          "filename": "1_3_5_Trifluoro_benzene.set",
+          "label": "1,3,5-Trifluorobenzene",
+          "model": "reference"
+        }
+      ]
+    },
+    {
+      "category": "Organophosphorus compounds — full spin sets",
+      "items": [
+        {
+          "filename": "dimethyl_phosphite.set",
+          "label": "Dimethyl phosphite — (CH₃O)₂P(O)H",
+          "model": "illustrative"
+        },
+        {
+          "filename": "dichlorvos.set",
+          "label": "Dichlorvos",
+          "model": "illustrative"
+        }
+      ]
+    },
+    {
+      "category": "Organophosphorus compounds — simplified fragments",
+      "items": [
+        {
+          "filename": "methylphosphonic_acid_CH3_P_fragment.set",
+          "label": "Methylphosphonic acid — CH₃–P fragment",
+          "model": "reduced"
+        },
+        {
+          "filename": "trimethyl_phosphite_one_methoxy.set",
+          "label": "Trimethyl phosphite — one methoxy branch",
+          "model": "reduced"
+        },
+        {
+          "filename": "dimethyl_methylphosphonate_two_methyl_groups.set",
+          "label": "Dimethyl methylphosphonate — two methyl groups",
+          "model": "reduced"
+        },
+        {
+          "filename": "Trimethyl_phosphate (one brench).set",
+          "label": "Trimethyl phosphate — one methoxy branch",
+          "model": "reduced"
+        },
+        {
+          "filename": "Triethyle_phosphate (one brench).set",
+          "label": "Triethyl phosphate — one ethoxy branch",
+          "model": "reduced"
+        }
+      ]
+    }
+  ]
+}
