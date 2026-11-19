@@ -118,7 +118,7 @@ def list_examples() -> dict:
             "  }",
             "  const option = document.createElement('option');",
             "  option.value = example.filename;",
-            "  option.textContent = example.label;",
+            "  option.textContent = example.label + (example.model === 'illustrative' ? ' [illustrative]' : (example.model === 'reduced' ? ' [reduced]' : ''));",
             "  if (example.model === 'illustrative' || example.model === 'reduced') {",
             "    option.title = 'Simplified / illustrative J-coupling model';",
             "  }",
