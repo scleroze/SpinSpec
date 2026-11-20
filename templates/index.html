@@ -426,7 +426,7 @@
         <span style="color:#94a3b8" aria-hidden="true">|</span>
         <a href="/tutorial" title="Illustrated guide in English">Tutorial</a>
         <span aria-hidden="true">|</span>
-        <a href="mailto:feedback@nmrspec.org">Contact / Feedback</a>
+        <a href="#feedbackText" id="contactFeedbackLink">Contact / Feedback</a>
       </nav>
       <h1 style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#1c3558">Spin<span style="color:#2563eb">Spec</span></h1>
       <p class="subtitle">Hamiltonian-based NMR spectrum modeling</p>
@@ -655,8 +655,19 @@
       </p>
 
       <div class="feedback-box">
+        <p style="font-size:16px;text-align:left;margin:0 0 12px">
+          Prefer email?
+          <a href="mailto:feedback@nmrspec.org">feedback@nmrspec.org</a>
+          (you can also copy the address).
+        </p>
         <textarea id="feedbackText" placeholder="Your message..."></textarea>
-        <button type="button" id="sendFeedbackBtn">Send feedback</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+          <button type="button" id="sendFeedbackBtn">Send feedback</button>
+          <button type="button" class="secondary"
+                  id="backToSpectrumBtn" style="display:none">
+            &#8592; Back to spectrum
+          </button>
+        </div>
         <div id="feedbackStatus"></div>
       </div>
 
@@ -840,12 +851,55 @@
 
     showInfoBtn.addEventListener('click', () => {
       previewImage.style.display = 'none';
-      previewImage.removeAttribute('src');
+      // Keep the calculated spectrum available for restoration.
       document.getElementById('groupResult').style.display = 'none';
+      document.getElementById('interactiveButton').style.display = 'none';
+      document.getElementById('exportData').hidden = true;
+
+      document.getElementById('backToSpectrumBtn').style.display =
+        latestSpectrumResult && latestSpectrumResult.image_url
+          ? 'inline-block' : 'none';
+
       placeholder.style.display = 'block';
       showMessage('');
       metaEl.textContent = `Current file: ${currentFileName || 'not selected'}.`;
     });
+
+
+    function openFeedbackForm() {
+      showInfoBtn.click();
+      const field = document.getElementById('feedbackText');
+      field.scrollIntoView({behavior: 'smooth', block: 'center'});
+      field.focus({preventScroll: true});
+    }
+
+    document.getElementById('contactFeedbackLink')
+      .addEventListener('click', event => {
+        event.preventDefault();
+        openFeedbackForm();
+      });
+
+    if (window.location.hash === '#feedbackText') {
+      window.addEventListener('load', openFeedbackForm, {once: true});
+    }
+
+    document.getElementById('backToSpectrumBtn')
+      .addEventListener('click', () => {
+        const result = latestSpectrumResult;
+        if (!result || !result.image_url) return;
+
+        placeholder.style.display = 'none';
+
+        updatePreview(
+          result.image_url,
+          result.set_filename || currentFileName
+        );
+        updateInteractiveButton(result);
+        updateGroupPreview(result);
+
+        const panel = document.querySelector('.right-panel');
+        if (panel) panel.scrollTo({top: 0, behavior: 'smooth'});
+      });
 
     async function sendRequest(endpoint) {
       const payload = getFormData();
