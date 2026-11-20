@@ -425,6 +425,8 @@
         <a href="/tr" lang="tr" title="Türkçe yazılım tanıtımı">TR</a>
         <span style="color:#94a3b8" aria-hidden="true">|</span>
         <a href="/tutorial" title="Illustrated guide in English">Tutorial</a>
+        <span aria-hidden="true">|</span>
+        <a href="mailto:feedback@nmrspec.org">Contact / Feedback</a>
       </nav>
       <h1 style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#1c3558">Spin<span style="color:#2563eb">Spec</span></h1>
       <p class="subtitle">Hamiltonian-based NMR spectrum modeling</p>
@@ -542,7 +544,7 @@
 
         <div class="button-row-bottom">
           <button type="button" class="primary" id="calculateBtn">Calculate spectrum</button>
-          <button type="button" class="secondary" id="showInfoBtn">Feedback</button>
+          <button type="button" class="secondary" id="showInfoBtn">Info &amp; Feedback</button>
         </div>
       </form>
 
@@ -1053,7 +1055,7 @@
         }
 
         try {
-          await fetch("/api/feedback", {
+          const response = await fetch("/api/feedback", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -1061,6 +1063,7 @@
             body: JSON.stringify({ message: text })
           });
 
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
           status.textContent = "Sent";
           document.getElementById("feedbackText").value = "";
         } catch {
