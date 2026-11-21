@@ -65,6 +65,18 @@ def compare():
                                if float(row["frequency_hz"]) == 0.0)
             finite_total = sum(strength for freq, strength in ordinary_with_groups
                                if freq > 1e-8)
+            if field == 0:
+                # Invariant DC appears in both broadened displays.
+                with open("group_curve_00000.dat", encoding="utf-8") as f:
+                    group_zero = [float(v) for v in next(f).split()]
+                assert group_zero[0] == 0.0
+                assert group_zero[1] + TOL_S >= dc
+                with open("Res_0_00000.dat", encoding="utf-8") as f:
+                    next(f)
+                    samples = [tuple(map(float, line.split())) for line in f]
+                closest = min(samples, key=lambda point: abs(point[0]))
+                assert abs(closest[0]) < 1e-6
+                assert closest[1] + 1e-5 >= dc
             if abs(dc - invariant_dc) > TOL_S:
                 raise AssertionError(f"DC mismatch {filename}, B={field}: "
                                      f"{dc} vs {invariant_dc}")
