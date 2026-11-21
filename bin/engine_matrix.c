@@ -13,6 +13,7 @@
  */
 
 #include <math.h> 
+#include <float.h>
 #include <stdio.h>
 #include <string.h> 
 #include <stdlib.h>
@@ -445,6 +446,25 @@ for (int i = 0; i < StatesNumber; i++) {
 
 	    gsl_eigen_symmv_free(workspace);
 
+    /* Match the energy-block tolerance of observer_invariant.h. The
+     * finite-frequency strength sum, subtracted from Tr(O^2)/2, gives
+     * the complete basis-invariant one-sided DC strength. This includes
+     * diagonal eigenbasis elements, even for degenerate eigenspaces. */
+    double max_abs_energy = 1.0;
+    for (int state = 0; state < StatesNumber; ++state) {
+        double energy = fabs(gsl_vector_get(eval, state));
+        if (energy > max_abs_energy) max_abs_energy = energy;
+    }
+    const double observer_energy_tolerance =
+        fmax(1e-10, 64.0 * DBL_EPSILON * max_abs_energy);
+    double observer_total_power = 0.0;
+    for (int spin = 0; spin < S; ++spin) {
+        const double weight = G[spin] / SS_OBS_GAMMA_REF_HZ_PER_MT;
+        observer_total_power += weight * weight;
+    }
+    observer_total_power *= (double)StatesNumber / 8.0;
+    double observer_ac_power = 0.0;
+
 /*
  * Calculate every pair of Hamiltonian eigenstates:
  *
@@ -468,7 +488,7 @@ for (int i = 0; i < StatesNumber; i++) {
         fprintf(fsp, "n     x1      x2   i j I\n");
         int progress = 0; // number of completed eigenstate pairs
         int total = StatesNumber * (StatesNumber - 1) / 2; // total unordered eigenstate pairs
-#pragma omp parallel for private(j, k, l, x1, x2) shared(fsp)
+#pragma omp parallel for private(j, k, l, x1, x2) shared(fsp) reduction(+:observer_ac_power)
 for (i = 0; i < StatesNumber - 1; i++) {
     for (j = i + 1; j < StatesNumber; j++) {
         double Dm = 0;
@@ -487,6 +507,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
         }
         x1 = fabs(gsl_vector_get(eval, j) - gsl_vector_get(eval, i));
         x2 = Dm * Dm;
+        if (x1 > observer_energy_tolerance) observer_ac_power += x2;
 
         #pragma omp critical
         {
@@ -507,7 +528,27 @@ for (i = 0; i < StatesNumber - 1; i++) {
         }
     }
 }
-    printf("\nDone!\n"); 
+    printf("\nDone!\n");
+
+    /* DC = 1/2 Tr(O^2) - sum_{nondegenerate i<j} |O_ij|^2.
+     * Tr(O^2)/2 = 2^S / 8 * sum_k (gamma_k/gamma_H)^2.
+     * Computing this from the sum rule avoids arbitrary eigenvectors
+     * in degenerate subspaces and costs O(1) extra memory. */
+    double observer_dc_power = observer_total_power - observer_ac_power;
+    if (fabs(observer_dc_power) <= 1e-10 * observer_total_power)
+        observer_dc_power = 0.0;
+    if (observer_dc_power < 0.0 || !isfinite(observer_dc_power)) {
+        fprintf(stderr, "Invalid invariant DC strength: %.17g\n", observer_dc_power);
+        return EXIT_FAILURE;
+    }
+    char dc_filename[64];
+    snprintf(dc_filename, sizeof(dc_filename), "Sp_dc_%05d.dat", Bc);
+    FILE *dc_file = fopen(dc_filename, "w");
+    if (!dc_file) { perror(dc_filename); return EXIT_FAILURE; }
+    fprintf(dc_file, "frequency_hz strength\n0 %.17g\n", observer_dc_power);
+    fclose(dc_file);
+    printf("Invariant DC strength: %.12g (sum-rule total %.12g)\n",
+           observer_dc_power, observer_total_power);
 
     /*
      * Experimental, opt-in group decomposition of the SAME gamma-weighted
@@ -730,19 +771,27 @@ for (i = 0; i < StatesNumber - 1; i++) {
            }
 	       fprintf(fsi,"%lf %lf\n",Sigma[Sgm[m]] ,Freq[m]); // first record: chemical shift (ppm) and reference frequency (Hz)
 	      
- 	       /* The dynamic spectrum excludes DC, as does group_graph.
-	        * Keep zero-frequency rows in the raw Sp_*.dat export. */
+ 	       /* Broaden all finite-frequency transitions and the separate
+	        * invariant DC contribution; do not use basis-dependent raw
+	        * i<j entries for numerically degenerate levels. */
 	       for (i=0; i<2000; i++) {
 	           Sgp[0][i] = -WidthSpectrum + WidthSpectrum*i/1000.0;
 	           Sgp[1][i] = 0.0;
 	       }
 	       for (i=0; i<n; i++) {
-	           if (Spr[2*i] <= 1e-9) continue;
+	           if (Spr[2*i] <= observer_energy_tolerance) continue;
 	           for (j=0; j<2000; j++) {
 	               double diff = Spr[2*i] - (Sgp[0][j] + Freq[m]);
 	               Sgp[1][j] += Spr[2*i+1]/(1.0 + diff*diff/WidthLine);
 	           }
-	       }   
+	       }
+	       if (observer_dc_power > 0.0) {
+	           for (j=0; j<2000; j++) {
+	               const double observed_frequency = Sgp[0][j] + Freq[m];
+	               Sgp[1][j] += observer_dc_power /
+	                   (1.0 + observed_frequency*observed_frequency/WidthLine);
+	           }
+	       }
 		for (i=0; i<2000; i++) fprintf(fsi,"%lf %lf\n", Sgp[0][i], Sgp[1][i]);   
               fclose(fsi); 
 	     }
