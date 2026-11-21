@@ -808,8 +808,30 @@ for (i = 0; i < StatesNumber - 1; i++) {
               if (groups_mode && *groups_mode) {
                   char group_command[192];
                   snprintf(group_command, sizeof(group_command),
-                           "./group_graph %d %.12g %.12g", Bc, fwhm_hz, WidthSpectrum);
-                  if (system(group_command) != 0) {
+                           "./group_graph %d %.12g", Bc, fwhm_hz);
+                  /* Pass Graph heights in spin-indexed form, rather than
+                   * panel order: Graph 3 0 and Graph 0 3 must both work.
+                   * A non-positive height requests automatic Y scaling. */
+                  char heights_spec[4096] = {0};
+                  size_t heights_len = 0;
+                  for (int h = 0; h < Sg; ++h) {
+                      int written = snprintf(heights_spec + heights_len,
+                              sizeof(heights_spec) - heights_len,
+                              "%s%d:%.17g", h ? "," : "", Sgm[h], V_size[h]);
+                      if (written < 0 ||
+                          (size_t)written >= sizeof(heights_spec) - heights_len) {
+                          fprintf(stderr, "Graph heights list is too long.\n");
+                          return EXIT_FAILURE;
+                      }
+                      heights_len += (size_t)written;
+                  }
+                  if (setenv("SPINSPEC_GRAPH_HEIGHTS", heights_spec, 1) != 0) {
+                      perror("setenv SPINSPEC_GRAPH_HEIGHTS");
+                      return EXIT_FAILURE;
+                  }
+                  int group_plot_status = system(group_command);
+                  unsetenv("SPINSPEC_GRAPH_HEIGHTS");
+                  if (group_plot_status != 0) {
                       fprintf(stderr, "Group spectrum plot failed.\n");
                       return EXIT_FAILURE;
                   }
