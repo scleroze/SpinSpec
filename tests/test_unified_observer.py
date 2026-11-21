@@ -59,9 +59,16 @@ def compare():
                 assert abs(s1-s2) < TOL_S
             invariant = read_invariant()
             significant = [row for row in invariant if float(row["frequency_hz"]) > 1e-8]
+            # Different energy-block pairs can share an identical transition
+            # frequency. Compare their sum once per frequency cluster.
+            compared = []
             for row in significant:
                 freq = float(row["frequency_hz"])
-                expected = float(row["total_strength"])
+                if any(abs(freq - known) < TOL_F for known in compared):
+                    continue
+                compared.append(freq)
+                expected = sum(float(x["total_strength"]) for x in significant
+                               if abs(float(x["frequency_hz"])-freq) < TOL_F)
                 observed = sum(strength for f,strength in ordinary_with_groups
                                if abs(f-freq) < TOL_F and f > 1e-8)
                 if abs(observed-expected) > TOL_S:
