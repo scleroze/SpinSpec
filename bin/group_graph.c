@@ -184,10 +184,13 @@ int main(int argc,char **argv) {
     snprintf(sticks,sizeof(sticks),"group_sticks_%05ld.dat",frame);
     FILE *fpsticks=fopen(sticks,"w");
     if(!fpsticks){perror(sticks);free(lines);return 1;}
+    size_t stick_count=0;
     for(size_t k=0;k<count;k++) {
         const Line *l=&lines[k];
-        if(l->frequency>1e-9 && l->frequency<=xmax && l->total>1e-14)
+        if(l->frequency>1e-9 && l->frequency<=xmax && l->total>1e-14) {
             fprintf(fpsticks,"%.17g %.17g\n",l->frequency,l->total);
+            stick_count++;
+        }
     }
     fclose(fpsticks);
 
@@ -203,10 +206,17 @@ int main(int argc,char **argv) {
     /* Top: compact positive-frequency stick overview. */
     fprintf(gp,"set origin 0,0.855\nset size 1,0.105\n");
     fprintf(gp,"set xrange [0:%.12g]\n",xmax);
-    fprintf(gp,"set yrange [0:*]\n");
+    if(stick_count) fprintf(gp,"set yrange [0:*]\n");
+    else fprintf(gp,"set yrange [0:1]\n");
     fprintf(gp,"unset key\nunset ytics\nunset xlabel\nunset ylabel\n");
     fprintf(gp,"set border 1\nunset grid\n");
-    fprintf(gp,"plot '%s' using 1:2 with impulses lw 2 lc rgb 'black' notitle\n",sticks);
+    if(stick_count)
+        fprintf(gp,"plot '%s' using 1:2 with impulses lw 2 lc rgb 'black' notitle\n",sticks);
+    else {
+        fprintf(gp,"set label 99 'No AC transitions in displayed range' at graph 0.5,0.5 center\n");
+        fprintf(gp,"plot 0 with lines lc rgb '#aaaaaa' notitle\n");
+        fprintf(gp,"unset label 99\n");
+    }
 
     /* Below: one panel for each group with a common frequency axis. */
     double panel_height=0.79/(double)groups;
