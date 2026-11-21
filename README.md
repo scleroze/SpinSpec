@@ -28,8 +28,11 @@ For the optional mode compile an additional executable:
 gcc -std=c11 -O2 bin/group_graph.c -o bin/group_graph -lm
 ```
 
-The original `Sp_*.dat`, `Res_*.dat` and `data_*.jpg` are preserved
-for backward compatibility. **Group curves are operator strengths, not
+The filenames `Sp_*.dat`, `Res_*.dat` and `data_*.jpg` are preserved.
+Starting with the corrected v1.1.0 engine, ordinary and grouped observations
+use the same signed gamma-weighted operator. As a result, ordinary numeric
+strengths change relative to older equal-weight results, even though frequencies
+and input `.set` files remain unchanged. **Group curves are operator strengths, not
 experimental FID amplitudes**: the initial density matrix, excitation,
 pulse sequence, longitudinal detector model and receiver response remain
 outside the scope of this version.
@@ -67,7 +70,7 @@ The transition frequencies are the absolute differences of eigenvalues expressed
 frequency(i,j) = abs(E[j] - E[i])
 ```
 
-Transition strengths are calculated from matrix elements of a single-spin-flip operator, transformed into the Hamiltonian eigenbasis. **In the legacy mode all spins enter that operator with equal weights.** The optional v1.1 group mode weights the observation operator by the signed gyromagnetic ratios; in legacy mode they enter only the Hamiltonian. initial-state populations, receiver response and pulse-sequence dynamics are not modeled. Consequently, reported amplitudes should not be interpreted as calibrated experimental signal intensities. In particular, the current equal-weight detection model does not provide a general physically complete zero-field J-spectrum for heteronuclear systems.
+Transition strengths are calculated from matrix elements of a single-spin-flip operator, transformed into the Hamiltonian eigenbasis. **Both ordinary and group-resolved modes weight the transverse observation operator by the signed gyromagnetic ratios** (`O = sum_k (gamma_k/gamma_H) I_kx`). The grouped mode additionally reports the group-specific and coherent cross contributions. Older equal-weight strengths are not the default after this v1.1.0 correction. initial-state populations, receiver response and pulse-sequence dynamics are not modeled. Consequently, reported amplitudes should not be interpreted as calibrated experimental signal intensities. In particular, the current equal-weight detection model does not provide a general physically complete zero-field J-spectrum for heteronuclear systems.
 
 The engine sums Lorentzian profiles for visualization. Each chosen graph window uses a reference Larmor frequency for its selected spin; **these windows are not isotope-selective component spectra**.
 
