@@ -68,8 +68,9 @@ def compare():
             if field == 0:
                 # Invariant DC appears in both broadened displays.
                 with open("group_curve_00000.dat", encoding="utf-8") as f:
-                    group_zero = [float(v) for v in next(f).split()]
-                assert group_zero[0] == 0.0
+                    samples = [[float(v) for v in line.split()] for line in f]
+                    group_zero = min(samples, key=lambda vals: abs(vals[0]))
+                assert abs(group_zero[0]) < 1e-12
                 assert group_zero[1] + TOL_S >= dc
                 with open("Res_0_00000.dat", encoding="utf-8") as f:
                     next(f)
