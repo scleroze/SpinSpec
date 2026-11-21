@@ -63,7 +63,7 @@ O = sum_g O_g, where O_g = sum_{k in g} (gamma_k/gamma_H) I_{kx}.
 
 For distinct energy blocks `a < b`, the invariant strength is `||P_a O P_b||_F²`. For `a=b`, the half-sided zero-frequency convention is `(1/2)||P_a O P_a||_F²`. Therefore block energies and dimensions provide important context for degeneracies.
 
-**Zero-frequency rows remain in the CSV**, although the plotted dynamic group spectrum omits them. Negative interference is not a negative probability or a stand-alone signal.
+**Zero-frequency rows remain in the CSV**, and the group plot now includes their invariant DC contribution. Negative interference is not a negative probability or a stand-alone signal.
 
 ## Comparing ordinary and group modes
 
@@ -79,7 +79,7 @@ frequency_offset_hz = frequency_hz - reference_frequency_hz.
 
 The `Graph` list in the input selects frequency **windows**, not which spins are included in the Hamiltonian or CSV. Linewidth and window half-width affect broadened plots but not the original transition CSV values.
 
-Output filenames remain unchanged: `Sp_00000.dat`, `Res_<spin>_00000.dat`, `data_00000.jpg`, `group_curve_00000.dat` and `group_spectrum_00000.jpg`. The old equal-spin-weight strengths are **not** preserved as the default mode. Both plotted dynamic spectra omit the zero-frequency component; raw CSV data retain zero-frequency rows, with the complete invariant DC weight in the grouped CSV. Subsequent frames use `00001`, etc.
+Output filenames remain unchanged: `Sp_00000.dat`, `Res_<spin>_00000.dat`, `data_00000.jpg`, `group_curve_00000.dat` and `group_spectrum_00000.jpg`. The old equal-spin-weight strengths are **not** preserved as the default mode. Both plots now include the zero-frequency contribution. For the ordinary plot this comes from `Sp_dc_00000.dat`, which stores the full basis-invariant DC strength reconstructed as `Tr(O²)/2` minus all nonzero transition strengths. The ordinary raw per-eigenstate-pair CSV does not include diagonal elements and is not itself a complete DC decomposition. The group CSV retains the complete block-resolved invariant DC strength. Subsequent frames use `00001`, etc.
 
 ## Web UI
 
