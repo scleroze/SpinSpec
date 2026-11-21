@@ -2,8 +2,8 @@
  * SpinSpec v1.1: Gnuplot rendering of invariant group strengths.
  * Input: Sp_invariant_<frame>.csv produced by experimental observer.
  * Outputs: group_curve_<frame>.dat, group_spectrum_<frame>.jpg.
- * The zero-frequency mathematical component is intentionally omitted
- * from the plotted dynamic spectrum (retained in the input CSV).
+ * The zero-frequency component is displayed from invariant energy blocks
+ * and retained in the CSV. No arbitrary degenerate basis is selected.
  * All spectra are relative transition strengths, NOT FID amplitudes.
  *
  * Usage: ./group_graph 0 0.2
@@ -80,7 +80,7 @@ int main(int argc,char **argv) {
         }
         double f=dummy[6],amp=dummy[7];
         if(f<0||amp< -1e-8){free(lines);fclose(fp);return 1;}
-        if(f<=1e-9) continue;  /* exclude DC from displayed AC spectrum */
+        /* Keep invariant DC exactly as supplied by the block projector. */
         if(count==capacity) {
             capacity*=2;
             Line *temp=realloc(lines,capacity*sizeof(*lines));
@@ -141,7 +141,7 @@ int main(int argc,char **argv) {
     if(!gp){perror("gnuplot");free(lines);return 1;}
     fprintf(gp,"set terminal jpeg size 1800,900 enhanced font 'Sans,17'\n");
     fprintf(gp,"set output '%s'\n",out);
-    fprintf(gp,"set title 'SpinSpec: invariant group-resolved AC spectrum (DC omitted)'\n");
+    fprintf(gp,"set title 'SpinSpec: invariant group-resolved spectrum (including DC)'\n");
     fprintf(gp,"set xlabel 'Frequency (Hz)'\n");
     fprintf(gp,"set ylabel 'Relative transition strength (Lorentzian broadened)'\n");
     fprintf(gp,"set xrange [%.12g:%.12g]\n",xmin,xmax);
@@ -160,6 +160,6 @@ int main(int argc,char **argv) {
         fprintf(stderr,"Gnuplot failed (status=%d)\n",status);
         return 1;
     }
-    printf("SpinSpec group graph written: %s (%d groups, DC excluded)\n",out,groups);
+    printf("SpinSpec group graph written: %s (%d groups, invariant DC included)\n",out,groups);
     return 0;
 }
