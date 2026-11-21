@@ -32,6 +32,7 @@ jobs:
           /usr/bin/python3 ../tests/test_hp_analytic.py
           /usr/bin/python3 ../tests/test_multispin_reference.py
           /usr/bin/python3 ../tests/test_invariant_reference.py
+          /usr/bin/python3 ../tests/test_unified_observer.py
       - name: Gnuplot output and legacy mode checks
         run: |
           cd bin
