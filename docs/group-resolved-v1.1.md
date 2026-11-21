@@ -1,8 +1,9 @@
 # SpinSpec v1.1: group-resolved relative line strengths
 
-The **group-resolved** option is a second observation model. It does **not**
-replace the legacy equal-spin-weight mode and does **not** model a particular
-zero-field experiment.
+The **group-resolved** option decomposes the SAME gamma-weighted
+observation operator as the ordinary v1.1.0 mode. It does **not** model
+a particular zero-field experiment. Ordinary spectra from older releases
+used an equal-spin-weight observer and have different relative strengths.
 
 ## What can be separated
 
@@ -75,9 +76,11 @@ writes:
   plotting backend. The graph deliberately excludes DC so finite J-lines
   are visible without artificial amplitude rescaling.
 
-The old graph `data_00000.jpg` is retained and is not a group-resolved
-plot; `Res_<spin>_00000.dat` still contains display windows rather than
-isotope-selective observations.
+The ordinary graph `data_00000.jpg` uses the same gamma-weighted total
+operator as the group-resolved plot, but does not show its decomposition.
+Both dynamic plots omit DC; the complete projector DC convention remains
+available in `Sp_invariant_*.csv`. `Res_<spin>_00000.dat` contains display
+windows rather than isotope-selective observations.
 
 The `group_graph` binary must be in the working directory alongside
 `engine_matrix` and `matrix_graph`. For Linux:
