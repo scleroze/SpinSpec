@@ -39,6 +39,13 @@ def read_invariant():
     with open("Sp_invariant_00000.csv", newline="") as f:
         return list(csv.DictReader(f))
 
+def read_dc():
+    with open("Sp_dc_00000.dat", encoding="utf-8") as f:
+        assert f.readline().strip() == "frequency_hz strength"
+        freq, strength = map(float, f.readline().split())
+        assert freq == 0.0
+        return strength
+
 def compare():
     for filename, gids in MODELS:
         for field in FIELDS:
@@ -52,12 +59,35 @@ def compare():
             env["SPINSPEC_OBSERVER_GROUPS"] = gids
             run_engine(env)
             ordinary_with_groups = read_ordinary()
+            dc = read_dc()
+            invariant = read_invariant()
+            invariant_dc = sum(float(row["total_strength"]) for row in invariant
+                               if float(row["frequency_hz"]) == 0.0)
+            finite_total = sum(strength for freq, strength in ordinary_with_groups
+                               if freq > 1e-8)
+            if field == 0:
+                # Invariant DC appears in both broadened displays.
+                with open("group_curve_00000.dat", encoding="utf-8") as f:
+                    group_zero = [float(v) for v in next(f).split()]
+                assert group_zero[0] == 0.0
+                assert group_zero[1] + TOL_S >= dc
+                with open("Res_0_00000.dat", encoding="utf-8") as f:
+                    next(f)
+                    samples = [tuple(map(float, line.split())) for line in f]
+                closest = min(samples, key=lambda point: abs(point[0]))
+                assert abs(closest[0]) < 1e-6
+                assert closest[1] + 1e-5 >= dc
+            if abs(dc - invariant_dc) > TOL_S:
+                raise AssertionError(f"DC mismatch {filename}, B={field}: "
+                                     f"{dc} vs {invariant_dc}")
+            if abs(dc + finite_total -
+                   sum(float(row["total_strength"]) for row in invariant)) > TOL_S:
+                raise AssertionError(f"Total invariant power mismatch {filename}, B={field}")
             if len(ordinary_without_groups) != len(ordinary_with_groups):
                 raise AssertionError("Ordinary pair count changed")
             for (f1,s1),(f2,s2) in zip(ordinary_without_groups,ordinary_with_groups):
                 assert abs(f1-f2) < TOL_F
                 assert abs(s1-s2) < TOL_S
-            invariant = read_invariant()
             significant = [row for row in invariant if float(row["frequency_hz"]) > 1e-8]
             # Different energy-block pairs can share an identical transition
             # frequency. Compare their sum once per frequency cluster.
@@ -79,7 +109,7 @@ def compare():
             if field == 0 and filename.startswith("Trimethyl") and max_finite < 1e-3:
                 raise AssertionError("H3-P zero-field J lines disappeared")
             print(f"PASS unified: {filename}, B={field:g} mT, "
-                  f"finite-blocks={len(significant)}", flush=True)
+                  f"finite-blocks={len(significant)}, dc={dc:.9g}", flush=True)
 
 if __name__ == "__main__":
     compare()

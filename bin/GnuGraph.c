@@ -18,7 +18,7 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
 
 /*
  * Render one JPEG frame using Gnuplot multiplot.
- * The upper panel contains all nonzero transitions in Sp_<frame>.dat.
+ * The upper panel contains finite transitions and an invariant DC stick.
  * Lower panels show Lorentz-broadened Res_<spin>_<frame>.dat files.
  * Each lower panel is a frequency window, not a nucleus-selective signal.
  */
@@ -48,8 +48,8 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   fprintf(gp, "unset ytics\n");
   fprintf(gp, "set border 1\n");
 // Determine the upper panel's frequency-axis tick interval.
-  /* Both ordinary and grouped observers are gamma-weighted. Omit DC
-     from the dynamic stick plot; preserve a usable axis when AC vanishes. */
+  /* Keep a usable axis when no finite-frequency line exists. Display
+     invariant DC separately, without arbitrary degenerate eigenvectors. */
   if (max_freq < 1e-9) max_freq = 40.0;
   double raw_step = max_freq / 10.0;
   int rounded_step = (int)(raw_step + 0.5);
@@ -64,7 +64,10 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   fprintf(gp, "set xrange [0:%lf]\n", max_freq * 1.05);
   /* The old plot '-' data stream is not supported inside multiplot in
      current Gnuplot. Read the actual SpinSpec transition file instead. */
-  fprintf(gp, "plot \"%s\" skip 1 using ($2>1e-9 ? $2 : 1/0):3 with impulses lc rgb \"black\" lw 2 notitle\n", flSp);
+  char flDC[256];
+  sprintf(flDC, "Sp_dc_%05d.dat", Bc);
+  fprintf(gp, "plot \"%s\" skip 1 using ($2>1e-9 ? $2 : 1/0):3 with impulses lc rgb \"black\" lw 2 notitle, ", flSp);
+  fprintf(gp, "\"%s\" skip 1 using 1:2 with impulses lc rgb \"gray40\" lw 3 notitle\n", flDC);
   fclose(data);
 // End of the upper stick-spectrum panel.
 
