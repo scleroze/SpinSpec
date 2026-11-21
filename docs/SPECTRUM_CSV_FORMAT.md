@@ -1,18 +1,18 @@
 # SpinSpec: numerical spectrum CSV formats
 
-This page describes the two numerical exports available from the SpinSpec web interface in the v1.1 test build. **The files contain discrete transition strengths before Lorentzian line broadening**, not samples from the plotted curves.
+This page describes the two numerical exports in SpinSpec v1.1.0 after the unified-observer correction. **The files contain discrete transition strengths before Lorentzian line broadening**, not samples from the plotted curves.
 
 Magnetic fields are entered in mT; all CSV transition frequencies are in **Hz**; transition strengths have **relative model units**. Neither mode models thermal populations, sample preparation, pulse sequences, relaxation, receiver response or calibrated experimental amplitudes.
 
 ## Ordinary mode — `Sp_transitions_00000.csv`
 
-This documented CSV is converted from the original engine output `Sp_00000.dat`, without modifying the numerical calculation. Each row is a pair of eigenstates:
+This CSV is converted from the main engine output `Sp_00000.dat`. The ordinary observer is now gamma-weighted, matching the total group observer. Each row is a pair of eigenstates:
 
 | Column | Meaning |
 | --- | --- |
 | `state_i`, `state_j` | Indices of two eigenstates, **1-based**, in the diagonalizer's order (not necessarily ordered by energy). |
 | `frequency_hz` | Transition frequency `abs(E_j - E_i)` when `E` is given in Hz, i.e. `|E_j-E_i|/h` for energies in joules. |
-| `relative_strength` | Squared eigenbasis matrix element of the **equal-weight legacy spin-flip observation operator**. |
+| `relative_strength` | Squared eigenbasis matrix element of the **gamma-weighted transverse observation operator** `O = sum_k (gamma_k/gamma_H) I_kx`. |
 
 Illustrative (not generated or experimental) values:
 
@@ -22,7 +22,7 @@ state_i,state_j,frequency_hz,relative_strength
 1,3,2131.200000,0.500000
 ```
 
-The underlying C program writes `Sp_00000.dat` values with six decimal places. The CSV retains that precision. Row order may vary under parallel computation.
+The C engine now writes transition frequency and relative strength with 17 significant decimal digits. The CSV conversion retains those digits. Row order may vary under parallel computation.
 
 **Important:** `Sp_00000.dat` has a sixth internal lookup column `I` that is indexed by **product-basis** states, not Hamiltonian eigenstates. It is **not a valid physical assignment of an eigenstate transition to a spin**, and is intentionally omitted from the user-facing CSV.
 
@@ -65,9 +65,9 @@ For distinct energy blocks `a < b`, the invariant strength is `||P_a O P_b||_F²
 
 **Zero-frequency rows remain in the CSV**, although the plotted dynamic group spectrum omits them. Negative interference is not a negative probability or a stand-alone signal.
 
-## Do not compare numeric intensities across modes naively
+## Comparing ordinary and group modes
 
-The **ordinary** operator weights spin flips equally and reports individual eigenstate-pair strengths. The **group** operator weights nuclear `I_x` by signed `gamma_k/gamma_H` and sums invariantly over degenerate blocks. Their numerical strengths have different operator definitions and normalizations; they are **not directly comparable absolute amplitudes**.
+Both modes now use the **same** `O = sum_k (gamma_k/gamma_H) I_kx` operator and normalization. Ordinary CSV rows refer to individual eigenstate pairs; group CSV rows refer to invariant energy-subspace pairs. Sum ordinary strengths across all pairs of states belonging to the corresponding distinct energy blocks to compare with the invariant group `total_strength` at nonzero frequency. At zero frequency, `Sp_invariant_*.csv` additionally includes diagonal eigenbasis matrix elements and the one-sided factor 1/2; the ordinary per-eigenstate-pair CSV does **not** and must not be directly compared for DC. For all full-spectrum invariant sums, `sum I = Tr(O^2)/2`.
 
 ## Frequencies versus plot offsets
 
@@ -79,7 +79,7 @@ frequency_offset_hz = frequency_hz - reference_frequency_hz.
 
 The `Graph` list in the input selects frequency **windows**, not which spins are included in the Hamiltonian or CSV. Linewidth and window half-width affect broadened plots but not the original transition CSV values.
 
-The original output files `Sp_00000.dat`, `Res_<spin>_00000.dat`, `data_00000.jpg`, `group_curve_00000.dat` and `group_spectrum_00000.jpg` remain available for their original purposes. Subsequent frames use `00001`, etc.
+Output filenames remain unchanged: `Sp_00000.dat`, `Res_<spin>_00000.dat`, `data_00000.jpg`, `group_curve_00000.dat` and `group_spectrum_00000.jpg`. The old equal-spin-weight strengths are **not** preserved as the default mode. Both plotted dynamic spectra omit the zero-frequency component; raw CSV data retain zero-frequency rows, with the complete invariant DC weight in the grouped CSV. Subsequent frames use `00001`, etc.
 
 ## Web UI
 

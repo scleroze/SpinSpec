@@ -39,7 +39,7 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   int n1, n2, n3, n4;
   double freq, ampl;
   while (fscanf(data, "%d %lf %lf %d %d %d", &n1, &freq, &ampl, &n2, &n3, &n4) == 6) {
-    if (ampl != 0.0 && freq > max_freq) max_freq = freq;
+    if (ampl > 1e-12 && freq > 1e-9 && freq > max_freq) max_freq = freq;
   }
   rewind(data);
   fgets(buf, sizeof(buf), data); // skip the header after rewinding
@@ -48,9 +48,8 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   fprintf(gp, "unset ytics\n");
   fprintf(gp, "set border 1\n");
 // Determine the upper panel's frequency-axis tick interval.
-  /* Equal-weight total-spin observer commutes with isotropic J at B0=0:
-     no finite-frequency legacy line exists. Keep a valid axis and leave the
-     separate group-resolved J-spectrum to group_graph. */
+  /* Both ordinary and grouped observers are gamma-weighted. Omit DC
+     from the dynamic stick plot; preserve a usable axis when AC vanishes. */
   if (max_freq < 1e-9) max_freq = 40.0;
   double raw_step = max_freq / 10.0;
   int rounded_step = (int)(raw_step + 0.5);
@@ -65,7 +64,7 @@ void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   fprintf(gp, "set xrange [0:%lf]\n", max_freq * 1.05);
   /* The old plot '-' data stream is not supported inside multiplot in
      current Gnuplot. Read the actual SpinSpec transition file instead. */
-  fprintf(gp, "plot \"%s\" skip 1 using 2:3 with impulses lc rgb \"black\" lw 2 notitle\n", flSp);
+  fprintf(gp, "plot \"%s\" skip 1 using ($2>1e-9 ? $2 : 1/0):3 with impulses lc rgb \"black\" lw 2 notitle\n", flSp);
   fclose(data);
 // End of the upper stick-spectrum panel.
 

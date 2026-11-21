@@ -6,8 +6,8 @@
  * discrete transitions and Lorentz-broadened display spectra.
  *
  * Hamiltonian eigenvalues are expressed in Hz (H/h); magnetic fields in mT.
- * The legacy detection operator sums single-spin flips with equal weights:
- * it does NOT include gyromagnetic weighting or state populations.
+ * The ordinary and group-resolved modes use one gamma-weighted I_x observer.
+ * Neither mode models state populations, preparation or receiver response.
  *
  * Build (Linux): gcc engine_matrix.c -o engine_matrix -fopenmp -lgsl -lopenblas -lm
  */
@@ -453,10 +453,10 @@ for (int i = 0; i < StatesNumber; i++) {
  *             (V[a,i]*V[b,j] + V[b,i]*V[a,j])
  *   A_ij  = D_ij^2
  *
- * V is evec. This is the legacy equal-weight single-spin-flip operator,
- * proportional to sum_k I_kx; the common 1/2 factor is omitted.
- * Gyromagnetic moments, initial-state populations and receiver response
- * are not included. The resulting line strengths are relative quantities.
+ * V is evec. The ordinary spectrum uses the SAME gamma-weighted operator
+ * as the sum of all spin groups: O = sum_k (gamma_k/gamma_H) I_kx.
+ * An I_kx flip has matrix element 1/2; retain the signed gamma ratio.
+ * Populations and receiver response are not modeled; strengths are relative.
  */
 	sprintf(fname, "Sp_%05d.dat", Bc); 
 	fsp = fopen(fname, "w");
@@ -475,8 +475,11 @@ for (i = 0; i < StatesNumber - 1; i++) {
         for (k = 0; k < StatesNumber - 1; k++) {
             for (l = k + 1; l < StatesNumber; l++) {
                 if (I[k*StatesNumber + l] != 0) {
-                    Dm += gsl_matrix_get(evec, k, i) * gsl_matrix_get(evec, l, j)
-                        + gsl_matrix_get(evec, l, i) * gsl_matrix_get(evec, k, j);
+                    int spin = I[k*StatesNumber + l] - 1;
+                    double weight = G[spin] / (2.0 * SS_OBS_GAMMA_REF_HZ_PER_MT);
+                    Dm += weight * (
+                        gsl_matrix_get(evec, k, i) * gsl_matrix_get(evec, l, j)
+                        + gsl_matrix_get(evec, l, i) * gsl_matrix_get(evec, k, j));
 
 
                 }
@@ -492,7 +495,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
              * states, not Hamiltonian eigenstates; it must not be interpreted
              * as a physical assignment of the eigenstate transition.
              */
-            fprintf(fsp, "%d %lf %lf %d %d %d\n", n, x1, x2, i + 1, j + 1, I[i*StatesNumber + j]);
+            fprintf(fsp, "%d %.17g %.17g %d %d %d\n", n, x1, x2, i + 1, j + 1, I[i*StatesNumber + j]);
             n++;
             progress++;
 
@@ -507,8 +510,8 @@ for (i = 0; i < StatesNumber - 1; i++) {
     printf("\nDone!\n"); 
 
     /*
-     * Experimental, opt-in gamma-weighted group observation. Leave the legacy
-     * Sp_*.dat and Res_*.dat paths unchanged. When enabled, write a separate
+     * Experimental, opt-in group decomposition of the SAME gamma-weighted
+     * operator used by the ordinary Sp_*.dat. File paths stay unchanged. When enabled, write a separate
      * CSV for each magnetic-field step. Example:
      *
      *   SPINSPEC_OBSERVER_GROUPS=0,0,0,1 ./engine_matrix model.set
@@ -708,7 +711,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
  * The contributions from ALL calculated transitions are summed as
  * A/(1 + (nu - nu0)^2/gamma^2), gamma = FWHM/2.
  */
-	double x;
+	/* The frequency grid is sampled by integer index for deterministic output. */
 
 	    double Sgp[2][2000]; // frequency grid and Lorentzian intensity
 	    double Freq[10];
@@ -727,15 +730,19 @@ for (i = 0; i < StatesNumber - 1; i++) {
            }
 	       fprintf(fsi,"%lf %lf\n",Sigma[Sgm[m]] ,Freq[m]); // first record: chemical shift (ppm) and reference frequency (Hz)
 	      
-	       for (i=0; i<2000; i++) Sgp[1][i]=0; // initialize the intensity grid
+ 	       /* The dynamic spectrum excludes DC, as does group_graph.
+	        * Keep zero-frequency rows in the raw Sp_*.dat export. */
+	       for (i=0; i<2000; i++) {
+	           Sgp[0][i] = -WidthSpectrum + WidthSpectrum*i/1000.0;
+	           Sgp[1][i] = 0.0;
+	       }
 	       for (i=0; i<n; i++) {
-		   j=0;
-		   for (x = -WidthSpectrum; x < WidthSpectrum*0.999; x = x+WidthSpectrum/1000) {
-		      if (i==0) Sgp[0][j] = x; // set the frequency grid on the first transition
-		      Sgp[1][j] = Sgp[1][j] + Spr[2*i+1]/(1+pow((Spr[2*i]-(x+Freq[m])), 2)/WidthLine); // add this transition's Lorentzian profile
-		      j++;
-		   }    
-		}   
+	           if (Spr[2*i] <= 1e-9) continue;
+	           for (j=0; j<2000; j++) {
+	               double diff = Spr[2*i] - (Sgp[0][j] + Freq[m]);
+	               Sgp[1][j] += Spr[2*i+1]/(1.0 + diff*diff/WidthLine);
+	           }
+	       }   
 		for (i=0; i<2000; i++) fprintf(fsi,"%lf %lf\n", Sgp[0][i], Sgp[1][i]);   
               fclose(fsi); 
 	     }
