@@ -583,7 +583,7 @@
   <img id="previewImage" alt="Spectrum preview" />
   <div id="groupResult" style="display:none;margin-top:18px;">
     <h3>Group-resolved spectrum (Gnuplot)</h3>
-    <p style="font-size:13px;">0 Hz is excluded from this dynamic plot, but retained in the downloadable invariant spectrum.</p>
+    <p style="font-size:13px;">0 Hz is included using invariant energy-block intensities. Each group has its own panel with Total and signed interference.</p>
     <img id="groupPreviewImage" alt="Separate spin-group spectra and interference" style="width:100%;height:auto;" />
     <a id="groupCsvLink" href="#" download>Download invariant transition strengths (CSV)</a>
   </div>
@@ -1383,7 +1383,7 @@
       : 'Download ordinary transition data (CSV)';
     note.textContent = grouped
       ? 'Energy-block transitions: total strength, group strengths and signed interference. DC rows are included.'
-      : 'Eigenstate-pair transitions: frequencies and legacy relative strengths. Values are unbroadened.';
+      : 'Eigenstate-pair transitions: frequencies and gamma-weighted relative strengths. Values are unbroadened.';
   };
   toggle.addEventListener('change', function () {
     window.spinspecUpdateExport(window.spinspecLastExportResult);
