@@ -16,7 +16,7 @@
 #include <errno.h>
 
 #define MAX_GROUPS 10
-#define MAX_POINTS 2400
+#define MAX_POINTS 2401
 #define MAX_LINE 2048
 typedef struct {
     double frequency, total, cross;
@@ -29,8 +29,8 @@ static double lorentzian(double x,double f,double gamma) {
 }
 
 int main(int argc,char **argv) {
-    if(argc<2||argc>3) {
-        fprintf(stderr,"usage: %s FRAME [FWHM_HZ]\n",argv[0]);
+    if(argc<2||argc>4) {
+        fprintf(stderr,"usage: %s FRAME [FWHM_HZ] [SPECTRAL_HALF_WIDTH_HZ]\n",argv[0]);
         return 2;
     }
     char *end=NULL;
@@ -41,6 +41,14 @@ int main(int argc,char **argv) {
     if(!isfinite(fwhm)||fwhm<=0) {
         fprintf(stderr,"FWHM must be positive\n");
         return 2;
+    }
+    double requested_half_width=0.0;
+    if(argc>3) {
+        requested_half_width=strtod(argv[3],&end);
+        if(!end||*end||!isfinite(requested_half_width)||requested_half_width<=0) {
+            fprintf(stderr,"Spectral half-width must be positive\n");
+            return 2;
+        }
     }
 
     char in[128],out[128],curve[128];
@@ -113,12 +121,10 @@ int main(int argc,char **argv) {
         min_visible=0;
     }
     /* Include 0 Hz on the frequency axis for zero-field J spectra. */
-    double xmax=max_visible*1.06+fmax(2.,2*fwhm);
-    double xmin=0.;
-    if(xmax>3000.&&min_visible>100.) {
-        xmin=fmax(0.,min_visible-(max_visible-min_visible)*.06-2*fwhm);
-    }
-    if(xmax<=xmin)xmax=xmin+fmax(20.,fwhm*100);
+    double xmax=requested_half_width>0?requested_half_width:
+                max_visible*1.06+fmax(2.,2*fwhm);
+    double xmin=-xmax;
+    if(xmax<=0||!isfinite(xmax)) { free(lines); return 1; }
     FILE *data=fopen(curve,"w");
     if(!data){perror(curve);free(lines);return 1;}
     /* Single data table: freq, total, groups, signed interference. */
@@ -137,29 +143,110 @@ int main(int argc,char **argv) {
         fprintf(data," %.12g\n",cross);
     }
     fclose(data);
+
+    /*
+     * The original multi-panel presentation: one panel per observer group.
+     * Each panel always overlays the SAME total, its own group strength and
+     * the signed interference term. DC is included in every curve.
+     *
+     * For readability, derive independent panel y-limits from AC line
+     * strengths. The (often large) DC peak remains in the data and may be
+     * clipped visually; no intensity value is renormalized or discarded.
+     */
+    double ylo[MAX_GROUPS], yhi[MAX_GROUPS];
+    static const char *group_color[MAX_GROUPS]={
+        "#008d3b", "#246bd2", "#b05d00", "#8a50b9", "#db4444",
+        "#00968b", "#9b8629", "#c25292", "#5b7264", "#444444"
+    };
+    for(int g=0;g<groups;g++) {
+        double pos=0.0,neg=0.0,dc_pos=0.0;
+        for(size_t k=0;k<count;k++) {
+            const Line *l=&lines[k];
+            if(l->frequency<=1e-9) {
+                dc_pos=fmax(dc_pos,fmax(l->total,l->group[g]));
+                continue;
+            }
+            if(l->frequency>xmax+40*fwhm)continue;
+            pos=fmax(pos,fmax(l->total,fmax(l->group[g],l->cross)));
+            neg=fmin(neg,l->cross);
+        }
+        if(pos==0.0)pos=dc_pos;
+        yhi[g]=pos*1.20+fmax(0.02,pos*0.04);
+        ylo[g]=neg*1.20-fmax(0.02,fabs(neg)*0.04);
+        if(yhi[g]<=0.0)yhi[g]=1.0;
+    }
+
+    /* The narrow stick plot above the group panels reproduces the former
+     * visual arrangement. Stick heights are unbroadened invariant strengths.
+     * DC is represented below in the group curves, not in this AC-only strip.
+     */
+    char sticks[128];
+    snprintf(sticks,sizeof(sticks),"group_sticks_%05ld.dat",frame);
+    FILE *fpsticks=fopen(sticks,"w");
+    if(!fpsticks){perror(sticks);free(lines);return 1;}
+    size_t stick_count=0;
+    for(size_t k=0;k<count;k++) {
+        const Line *l=&lines[k];
+        if(l->frequency>1e-9 && l->frequency<=xmax && l->total>1e-14) {
+            fprintf(fpsticks,"%.17g %.17g\n",l->frequency,l->total);
+            stick_count++;
+        }
+    }
+    fclose(fpsticks);
+
     FILE *gp=popen("gnuplot","w");
     if(!gp){perror("gnuplot");free(lines);return 1;}
-    fprintf(gp,"set terminal jpeg size 1800,900 enhanced font 'Sans,17'\n");
+    int height=180+470*groups;
+    fprintf(gp,"set terminal jpeg size 1800,%d enhanced font 'Sans,16'\n",height);
     fprintf(gp,"set output '%s'\n",out);
-    fprintf(gp,"set title 'SpinSpec: invariant group-resolved spectrum (including DC)'\n");
-    fprintf(gp,"set xlabel 'Frequency (Hz)'\n");
-    fprintf(gp,"set ylabel 'Relative transition strength (Lorentzian broadened)'\n");
-    fprintf(gp,"set xrange [%.12g:%.12g]\n",xmin,xmax);
-    fprintf(gp,"set grid xtics ytics\n");
-    fprintf(gp,"set key outside top center horizontal\n");
-    fprintf(gp,"set zeroaxis\n");
+    fprintf(gp,"set multiplot title 'SpinSpec: group-resolved spectrum (including DC)' font 'Sans,20'\n");
     fprintf(gp,"set colorsequence classic\n");
-    fprintf(gp,"plot '%s' using 1:2 with lines lw 3 title 'Total'",curve);
-    for(int g=0;g<groups;g++)
-       fprintf(gp,", '' using 1:%d with lines lw 2 title 'Group %d'",g+3,g);
-    fprintf(gp,", '' using 1:%d with lines lw 2 dt 2 title 'Interference'\n",groups+3);
-    fprintf(gp,"unset output\n");
+    fprintf(gp,"set grid xtics ytics\n");
+
+    /* Top: compact positive-frequency stick overview. */
+    fprintf(gp,"set origin 0,0.855\nset size 1,0.105\n");
+    fprintf(gp,"set xrange [0:%.12g]\n",xmax);
+    if(stick_count) fprintf(gp,"set yrange [0:*]\n");
+    else fprintf(gp,"set yrange [0:1]\n");
+    fprintf(gp,"unset key\nunset ytics\nunset xlabel\nunset ylabel\n");
+    fprintf(gp,"set border 1\nunset grid\n");
+    if(stick_count)
+        fprintf(gp,"plot '%s' using 1:2 with impulses lw 2 lc rgb 'black' notitle\n",sticks);
+    else {
+        fprintf(gp,"set label 99 'No AC transitions in displayed range' at graph 0.5,0.5 center\n");
+        fprintf(gp,"plot 0 with lines lc rgb '#aaaaaa' notitle\n");
+        fprintf(gp,"unset label 99\n");
+    }
+
+    /* Below: one panel for each group with a common frequency axis. */
+    double panel_height=0.79/(double)groups;
+    for(int g=0;g<groups;g++) {
+        double origin_y=0.045+(groups-1-g)*panel_height;
+        fprintf(gp,"set origin 0,%.12g\nset size 1,%.12g\n",
+                origin_y,panel_height);
+        fprintf(gp,"set xrange [%.12g:%.12g]\n",xmin,xmax);
+        fprintf(gp,"set yrange [%.12g:%.12g]\n",ylo[g],yhi[g]);
+        fprintf(gp,"set border 15\nset ytics\nset xtics\nset grid xtics ytics\n");
+        fprintf(gp,"set zeroaxis lc rgb '#777777'\n");
+        fprintf(gp,"set key right top horizontal\n");
+        fprintf(gp,"set ylabel 'Group %d' font 'Sans,16'\n",g);
+        if(g==groups-1)
+            fprintf(gp,"set xlabel 'Frequency (Hz)'\n");
+        else
+            fprintf(gp,"unset xlabel\n");
+        fprintf(gp,"plot '%s' using 1:2 with lines lw 2 lc rgb '#444444' title 'Total', ",curve);
+        fprintf(gp,"'' using 1:%d with lines lw 2 lc rgb '%s' title 'Group %d', ",
+                g+3,group_color[g],g);
+        fprintf(gp,"'' using 1:%d with lines lw 2 lc rgb '#00afc8' title 'Interference'\n",
+                groups+3);
+    }
+    fprintf(gp,"unset multiplot\nset output\n");
     int status=pclose(gp);
     free(lines);
     if(status!=0){
         fprintf(stderr,"Gnuplot failed (status=%d)\n",status);
         return 1;
     }
-    printf("SpinSpec group graph written: %s (%d groups, invariant DC included)\n",out,groups);
+    printf("SpinSpec group graph written: %s (%d panels/groups, invariant DC included)\n",out,groups);
     return 0;
 }

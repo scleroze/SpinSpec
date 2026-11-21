@@ -808,7 +808,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
               if (groups_mode && *groups_mode) {
                   char group_command[192];
                   snprintf(group_command, sizeof(group_command),
-                           "./group_graph %d %.12g", Bc, fwhm_hz);
+                           "./group_graph %d %.12g %.12g", Bc, fwhm_hz, WidthSpectrum);
                   if (system(group_command) != 0) {
                       fprintf(stderr, "Group spectrum plot failed.\n");
                       return EXIT_FAILURE;
