@@ -856,7 +856,7 @@
     // separators, while the C engine and .set files always receive dots.
     // Lists are separated with whitespace, never with ambiguous digit commas.
     const decimalPattern =
-      /^[+-]?(?:\\d+(?:[.,]\\d*)?|[.,]\\d+)(?:[eE][+-]?\\d+)?$/;
+      /^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?$/;
 
     function normalizeDecimalToken(token, label) {
       const value = token.trim();
@@ -869,11 +869,11 @@
     }
 
     function normalizeNumericList(raw, label, allowAuto = false) {
-      const text = raw.replace(/\\r/g, '').trim();
+      const text = raw.replace(/\r/g, '').trim();
       if (!text) return '';
       // A comma followed by whitespace is unambiguously a list delimiter.
       // A comma between digits is decimal, e.g. 42,577 17,235.
-      const tokens = text.replace(/,\\s+/g, ' ').split(/\\s+/).filter(Boolean);
+      const tokens = text.replace(/,\s+/g, ' ').split(/\s+/).filter(Boolean);
       const result = [];
       for (const token of tokens) {
         if (allowAuto && token.toLowerCase() === 'auto') {
@@ -899,17 +899,17 @@
     }
 
     function normalizeCouplingRows(raw) {
-      return raw.replace(/\\r/g, '').split('\\n').map(line => {
+      return raw.replace(/\r/g, '').split('\n').map(line => {
         const text = line.trim();
         if (!text) return '';
-        const values = normalizeNumericList(text, 'J-coupling row').split(/\\s+/);
+        const values = normalizeNumericList(text, 'J-coupling row').split(/\s+/);
         if (values.length !== 3 ||
-            !/^\\d+$/.test(values[0]) || !/^\\d+$/.test(values[1]))
+            !/^\d+$/.test(values[0]) || !/^\d+$/.test(values[1]))
           throw new Error(
             'Each J-coupling row must contain two integer spin indices and one J value.'
           );
         return values.join(' ');
-      }).filter(Boolean).join('\\n');
+      }).filter(Boolean).join('\n');
     }
 
     function optionalDecimal(id, label) {
@@ -942,7 +942,7 @@
         document.getElementById('gammas').value, 'gyromagnetic ratios');
       const shifts = normalizeNumericList(
         document.getElementById('shifts').value, 'chemical shifts');
-      if (gammas && shifts && gammas.split(/\\s+/).length !== shifts.split(/\\s+/).length)
+      if (gammas && shifts && gammas.split(/\s+/).length !== shifts.split(/\s+/).length)
         throw new Error('The number of chemical shifts must equal the number of spins.');
       return {
         title: document.getElementById('title').value.trim(),
@@ -990,7 +990,7 @@
       const asFreq = document.getElementById("fieldAsProtonFrequency").checked;
       const canonical = normalizeNumericList(raw, 'external field');
       if (!canonical) throw new Error('External field is required.');
-      const values = canonical.split(/\\s+/);
+      const values = canonical.split(/\s+/);
       if (asFreq) {
         if (values.length !== 1)
           throw new Error('Proton frequency must be a single value in MHz.');
@@ -1470,7 +1470,7 @@
     function parseNumericList(text, name) {
       const normalized = normalizeNumericList(text, name);
       if (!normalized) throw new Error(`${name} is empty.`);
-      return normalized.split(/\\s+/).map(Number);
+      return normalized.split(/\s+/).map(Number);
     }
 
     function getSpinModel() {
@@ -1485,7 +1485,7 @@
       for (const raw of lines) {
         const line = raw.trim();
         if (!line || line.startsWith('#')) continue;
-        const parts = normalizeNumericList(line, 'J-coupling row').split(/\\s+/);
+        const parts = normalizeNumericList(line, 'J-coupling row').split(/\s+/);
         if (parts.length !== 3) throw new Error(`Invalid J-coupling row: "${line}".`);
         const [a, b, v] = parts.map(Number);
         if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n || a === b || !Number.isFinite(v)) {
