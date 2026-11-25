@@ -567,6 +567,10 @@
 
         <div class="button-row-bottom">
           <button type="button" class="primary" id="calculateBtn">Calculate spectrum</button>
+          <button type="button" class="secondary" id="replotBtn" disabled
+                  title="Use saved transitions to change linewidth and graph limits">
+            Replot only
+          </button>
           <button type="button" class="secondary" id="showInfoBtn">Info &amp; Feedback</button>
         </div>
       </form>
@@ -719,6 +723,7 @@
     const openSetInput = document.getElementById('openSetInput');
     const saveSetBtn = document.getElementById('saveSetBtn');
     const calculateBtn = document.getElementById('calculateBtn');
+    const replotBtn = document.getElementById('replotBtn');
     const previewImage = document.getElementById('previewImage');
     const placeholder = document.getElementById('placeholder');
     const exampleSelect = document.getElementById('exampleSelect');
@@ -948,8 +953,8 @@
         if (panel) panel.scrollTo({top: 0, behavior: 'smooth'});
       });
 
-    async function sendRequest(endpoint) {
-      const payload = getFormData();
+    async function sendRequest(endpoint, suppliedPayload = null) {
+      const payload = suppliedPayload || getFormData();
       setStatus('Sending request to server...', '');
 
       const response = await fetch(endpoint, {
@@ -967,6 +972,39 @@
     }
 
     let latestSpectrumResult = null;
+    let cachedPhysics = null;
+    let cachedJobId = null;
+
+    function physicalSignature(data) {
+      const singleLine = s => (s || '').replace(/,/g, ' ').trim()
+        .replace(/\s+/g, ' ');
+      const couplingLines = s => (s || '').replace(/\r/g, '').split('\n')
+        .map(singleLine).filter(Boolean).join('\n');
+      return JSON.stringify({
+        gammas: singleLine(data.gammas),
+        shifts: singleLine(data.shifts),
+        field: singleLine(data.field),
+        jcouplings: couplingLines(data.jcouplings),
+        observer_groups: singleLine(data.observer_groups),
+      });
+    }
+
+    function saveReusableResult(result, data) {
+      cachedPhysics = physicalSignature(data);
+      cachedJobId = result.job_id;
+      replotBtn.disabled = false;
+    }
+
+    function physicalStateIsUnchanged(data) {
+      return !!cachedJobId && cachedPhysics === physicalSignature(data);
+    }
+
+    async function redrawFromTransitions(data) {
+      return sendRequest('/api/replot', {
+        ...data, source_job_id: cachedJobId,
+      });
+    }
+
     const missingGroupText =
       'Group spectrum not calculated. Enable groups and press Calculate spectrum.';
 
@@ -1080,7 +1118,9 @@
         metaEl.textContent = `Current file: ${currentFileName}`;
         setStatus(`Example ${data.filename} loaded. Starting calculation...`, '');
 
-        const result = await sendRequest('/api/calculate');
+        const calculationData = getFormData();
+        const result = await sendRequest('/api/calculate', calculationData);
+        saveReusableResult(result, calculationData);
 
         if (result.image_url) {
           updatePreview(result.image_url, data.filename);
@@ -1116,20 +1156,48 @@
 
     saveSetBtn.addEventListener('click', downloadSetFile);
 
+    async function showCalculatedResult(result, data) {
+      saveReusableResult(result, data);
+      if (result.image_url) {
+        updatePreview(result.image_url, result.set_filename || currentFileName);
+      }
+      updateInteractiveButton(result);
+      updateGroupPreview(result);
+      setStatus(result.message || 'Calculation completed.', 'ok');
+    }
+
     calculateBtn.addEventListener('click', async () => {
       try {
-        const result = await sendRequest('/api/calculate');
-
-        if (result.image_url) {
-          updatePreview(result.image_url, result.set_filename || currentFileName);
+        const data = getFormData();
+        let result;
+        if (physicalStateIsUnchanged(data)) {
+          try {
+            result = await redrawFromTransitions(data);
+          } catch (error) {
+            // Cache may have expired or originate from an older job format.
+            // Recalculate only when the server explicitly rejects reuse.
+            if (!/HTTP 409|\"status_code\":409/.test(error.message)) throw error;
+            result = await sendRequest('/api/calculate', data);
+          }
+        } else {
+          result = await sendRequest('/api/calculate', data);
         }
-
-        updateInteractiveButton(result);
-        updateGroupPreview(result);
-
-        setStatus(result.message || 'Calculation completed.', 'ok');
+        await showCalculatedResult(result, data);
       } catch (error) {
         setStatus(`Error calculating spectrum: ${error.message}`, 'error');
+      }
+    });
+
+    replotBtn.addEventListener('click', async () => {
+      try {
+        const data = getFormData();
+        if (!physicalStateIsUnchanged(data)) {
+          throw new Error('Magnetic field, chemical shifts, couplings or spin groups changed. Use Calculate spectrum.');
+        }
+        const result = await redrawFromTransitions(data);
+        await showCalculatedResult(result, data);
+      } catch (error) {
+        setStatus(`Replot unavailable: ${error.message}`, 'error');
       }
     });
     
