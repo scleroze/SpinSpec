@@ -25,6 +25,10 @@
 #include "observer_invariant.h"
 #include <ctype.h>
 #include <time.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <errno.h>
+extern char **environ;
 #define MAX_LINE_LENGTH 1024
 #define MAX_WORD_LENGTH 256
 
@@ -1251,14 +1255,31 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
           fprintf(stderr, "PROFILE broadening: %.3f s\n",
         ss_wall_seconds() - ss_t_broad);
 
+    /* Pass argv directly; .set filenames may contain spaces, parentheses
+     * or other shell metacharacters.  No shell interpretation is needed. */
     char command[256];
-          sprintf(command, "./matrix_graph %s %d", Mfile, Bc); // invoke the graphing helper for this field step
-          int matrix_plot_status = system(command);
-          if (matrix_plot_status != 0) {
-              fprintf(stderr, "matrix_graph failed (status=%d)\n",
-                      matrix_plot_status);
-              return EXIT_FAILURE;
-          }
+    char graph_frame[32];
+    snprintf(graph_frame, sizeof(graph_frame), "%d", Bc);
+    char *graph_argv[] = {"./matrix_graph", Mfile, graph_frame, NULL};
+    pid_t graph_pid;
+    int spawn_error = posix_spawn(&graph_pid, "./matrix_graph",
+                                  NULL, NULL, graph_argv, environ);
+    if (spawn_error != 0) {
+        fprintf(stderr, "Cannot start matrix_graph: %s\n",
+                strerror(spawn_error));
+        return EXIT_FAILURE;
+    }
+    int matrix_plot_status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(graph_pid, &matrix_plot_status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited < 0 || !WIFEXITED(matrix_plot_status) ||
+        WEXITSTATUS(matrix_plot_status) != 0) {
+        fprintf(stderr, "matrix_graph failed (status=%d)\n",
+                matrix_plot_status);
+        return EXIT_FAILURE;
+    }
           /* In optional group mode, render the invariant result through
              SpinSpec's native C/Gnuplot plotting path as a separate JPEG.
              Legacy data_*.jpg and Res_*.dat remain untouched. */
