@@ -178,6 +178,21 @@ int main(int argc,char **argv) {
         return 2;
     }
     const int auto_x = (requested_width == 0.0);
+    double left_override = NAN, right_override = NAN;
+    const char *left_text = getenv("SPINSPEC_X_LEFT");
+    const char *right_text = getenv("SPINSPEC_X_RIGHT");
+    if (left_text && *left_text && strcmp(left_text, "auto") != 0) {
+        char *tail = NULL;
+        left_override = strtod(left_text, &tail);
+        if (tail == left_text || *tail || !isfinite(left_override)) return 2;
+    }
+    if (right_text && *right_text && strcmp(right_text, "auto") != 0) {
+        char *tail = NULL;
+        right_override = strtod(right_text, &tail);
+        if (tail == right_text || *tail || !isfinite(right_override)) return 2;
+    }
+    if (isfinite(left_override) && isfinite(right_override) &&
+        left_override >= right_override) return 2;
 
     char in[128],out[128],curve[128];
     snprintf(in,sizeof(in),"Sp_invariant_%05ld.csv",frame);
@@ -302,6 +317,12 @@ int main(int argc,char **argv) {
             windows[g].half_width = auto_group_half_width(
                 lines, count, g, windows[g].center,
                 windows[g].half_width, fwhm);
+        if (isfinite(left_override))
+            windows[g].half_width = fmax(windows[g].half_width,
+                                        fabs(left_override));
+        if (isfinite(right_override))
+            windows[g].half_width = fmax(windows[g].half_width,
+                                        fabs(right_override));
         plotted_groups++;
     }
     if(plotted_groups<1){
@@ -376,6 +397,10 @@ int main(int argc,char **argv) {
         p->half_width = auto_x
             ? auto_group_half_width(lines, count, g, center, fabs(offset), fwhm)
             : fabs(offset);
+        if (isfinite(left_override))
+            p->half_width = fmax(p->half_width, fabs(left_override));
+        if (isfinite(right_override))
+            p->half_width = fmax(p->half_width, fabs(right_override));
         fprintf(stderr,
                 "GROUP X-RANGE group=%d spin=%d mode=%s requested=%.6g selected=%.6g Hz\n",
                 g, spin, auto_x ? "auto" : "manual", fabs(offset), p->half_width);
@@ -490,8 +515,18 @@ int main(int argc,char **argv) {
         }
         fprintf(gp,"set xlabel 'Frequency offset (Hz)'\n");
         fprintf(gp,"set ylabel 'Relative strength'\n");
-        fprintf(gp,"set xrange [-%.17g:%.17g]\n",
-                p->half_width,p->half_width);
+        double panel_left = -p->half_width;
+        double panel_right = p->half_width;
+        if (auto_x) panel_left = fmax(panel_left, -p->center);
+        if (isfinite(left_override)) panel_left = left_override;
+        if (isfinite(right_override)) panel_right = right_override;
+        if (!(panel_left < panel_right)) {
+            fprintf(stderr, "Invalid group panel XRange (%g:%g)\n",
+                    panel_left, panel_right);
+            fclose(gp);free(lines);return 1;
+        }
+        fprintf(gp,"set xrange [%.17g:%.17g]\n",
+                panel_left,panel_right);
         /* Graph heights limits the positive Y maximum.  The negative end
          * stays automatic so signed Interference is never silently hidden.
          * Height 0 preserves the current automatic scale. */
