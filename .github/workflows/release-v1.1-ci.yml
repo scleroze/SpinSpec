@@ -66,7 +66,7 @@ jobs:
                          and float(r["total_strength"])>1e-6 for r in rows)
           with open("group_curve_00000.dat") as f:
               samples=[[float(v) for v in line.split()] for line in f]
-          assert len(samples)==2401
+          # group_curve is sampled at MAX_POINTS=2400; only the local\n          # per-spin curves use LOCAL_POINTS=2401.\n          assert len(samples)==2400
           assert all(len(s)==5 and all(math.isfinite(v) for v in s) for s in samples)
           # Total = group0 + group1 + signed interference
           assert max(abs(s[1]-s[2]-s[3]-s[4]) for s in samples)<1e-6
