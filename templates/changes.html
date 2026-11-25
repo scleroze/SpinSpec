@@ -39,8 +39,12 @@
         <li>Nine-spin benchmarks: approximately 22× faster at 3 T and 49× faster at zero field in the validated benchmark environment. Speed depends on hardware and the spin system.</li>
         <li>Compared with the reference engine, maximum line-frequency deviations were approximately 1.66 × 10<sup>−5</sup> Hz at 3 T and 1.68 × 10<sup>−12</sup> Hz at zero field; the invariant DC contribution matched.</li>
         <li>Corrected magnetic-field, linewidth and automatic graph-height settings across 17 example files.</li>
-        <li>Optional automatic horizontal scaling: enter a zero spectrum half-width to fit significant transitions in ordinary and group panels. Positive widths retain exact manual control.</li>
-        <li>Input parameters and export data formats remain compatible; the public web limit remains 8 spins.</li>
+        <li>Unified Gnuplot renderer for ordinary spectra and optional group contributions. The observer operator is consistently signed and gamma-weighted in both modes.</li>
+        <li>Automatic redraw from saved transitions when only FWHM, displayed windows or X/Y bounds change; no second Hamiltonian diagonalization is required.</li>
+        <li>Simplified calculator interface: one FWHM input, a collapsible Advanced spectrum settings section, automatic plot scales and independent left/right X and lower/upper Y bounds (including negative interference).</li>
+        <li>Both point and comma are accepted as decimal separators in browser inputs; whitespace separates numbers in lists. Saved .set files retain machine-readable decimal points.</li>
+        <li>Rate-limit and calculation errors appear directly in the spectrum-preview area in English.</li>
+        <li>The former Graph heights and spectrum half-width fields are hidden from the web interface; older .set records are imported compatibly. The public web limit remains 8 spins.</li>
       </ul>
     </div>
   </section>
