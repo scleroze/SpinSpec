@@ -172,31 +172,18 @@
     <p>Every panel initially uses automatic vertical scaling. There is <b>no Graph heights field</b> in version 1.2. Enter a Y minimum or maximum only when you need a particular range. In group-resolved mode, SpinSpec automatically selects a reference window for each nonempty observer group.</p>
   </section>
 
-  <section>
-    <h2>9. Line width, spectral window, and calculation</h2>
-    <p>The FWHM is now a separate numeric field under <b>Advanced spectrum settings</b>. The horizontal window is automatic until the user supplies one or both X boundaries.</p>
-    <table>
-      <thead><tr><th>Value</th><th>Meaning</th><th>Example</th></tr></thead>
-      <tbody>
-        <tr><td>Line width</td><td>Lorentzian full width at half maximum (FWHM), used for display broadening only.</td><td><code>0.5</code></td></tr>
-        <tr><td>X boundaries</td><td>Optional independent frequency-offset limits. Blank means automatic for that boundary. When both are blank, the internal half-width is <code>0</code> (automatic).</td><td><code>Left = 0</code>, <code>Right = 100</code></td></tr>
-      </tbody>
-    </table>
-    <figure>
-      <img src="/static/1_9.png" alt="Line width and calculate spectrum">
-      <figcaption>After checking the parameters, press Calculate spectrum.</figcaption>
-    </figure>
-    <p>Press <b>Save set</b> to store the current input, <b>Open set</b> to load an existing file, or <b>Calculate spectrum</b> to run the Hamiltonian calculation and generate the plotted spectra.</p>
-    <p><b>Calculate spectrum</b> automatically chooses between full
-    Hamiltonian diagonalization and fast plotting from saved transition
-    frequencies, strengths and invariant DC contributions. Changing FWHM,
-    X or Y bounds, or displayed spin windows needs only plotting;
-    changing magnetic field, gyromagnetic ratios, chemical shifts,
-    J-couplings or observer-group assignments triggers a full calculation.
-    This also applies after opening a modified <code>.set</code> file,
-    provided the previous calculation is available in the current browser
-    session. A hint beneath the button shows which path will run. Jobs from
-    older software versions without cache metadata are recalculated.</p>
+  <section id="display-controls">
+    <h2>9. Line width, independent X/Y axes and automatic replot</h2>
+    <p>Expand <b>Advanced spectrum settings (linewidth and plot axes)</b>. The former combined line-width/graph-width input and separate <b>Graph heights</b> input have been removed.</p>
+    <div class="grid" aria-label="Current advanced display controls">
+      <div class="field"><b>Line width (FWHM, Hz)</b><p>Enter one positive number, such as <code>0.2</code> or <code>0,2</code>. This controls Lorentzian broadening without changing transition frequencies or strengths.</p></div>
+      <div class="field"><b>Spectrum X boundaries</b><p>Specify Left and Right independently as frequency offsets in Hz, e.g. <code>Left = 0</code>, <code>Right = 100</code>. A blank boundary is automatic; <b>Show right side only</b> sets Left to 0.</p></div>
+      <div class="field"><b>Independent Y limits</b><p>Lower <code>-0,25</code> and upper <code>0,5</code> bounds can expose weak lines and negative interference. One value applies to all panels, or enter space-separated values in panel order. Blank is automatic.</p></div>
+      <div class="field"><b>Calculate spectrum</b><p>The same button handles the initial calculation and redraw from saved transitions. Its nearby hint indicates whether the physical model changed or only the graph will be redrawn.</p></div>
+    </div>
+    <p>For example, choose Fluoroethane, set FWHM to <code>0.5</code> and leave both X limits blank. After the calculation, enter <code>0</code> and <code>100</code> in the Left and Right boxes and press <b>Calculate spectrum</b> again. The transitions are reused without diagonalization; clearing the fields restores automatic windows.</p>
+    <p><b>Save set</b> downloads the current model and display settings; <b>Open set</b> loads a model. Replot requires a previous compatible job in the same browser tab. Reloading the page or changing Hamiltonian parameters requires a full calculation.</p>
+    <div class="note">Calculation errors and HTTP 429 rate-limit notices are shown prominently over the preview. They do not silently modify the model.</div>
   </section>
 
   <!-- SPINSPEC_GROUP_MODE_GUIDE_V12 -->
@@ -211,7 +198,7 @@
       <li>Check the <b>Group 0 / Group 1 / ...</b> selectors next to each spin. These are suggestions, <b>not a proof of strict magnetic equivalence</b>.</li>
       <li>Choose <b>Auto-detect groups</b> to regenerate the suggestions after editing the spin model, or <b>Separate all spins</b> to assign one group to every spin.</li>
       <li>Use the selectors to combine or split groups manually. Alternatively expand <b>Advanced: edit group IDs</b> and enter one integer (0–9) per spin in spin order.</li>
-      <li>Press <b>Calculate spectrum</b>. A second image shows each group's strength, the full strength and the signed interference. The invariant CSV can be downloaded below it.</li>
+      <li>Press <b>Calculate spectrum</b>. The right-hand preview switches to the group-resolved plot showing total strength, group contributions and signed interference. Download the invariant CSV below the plot or expand <b>Export numerical transition data (CSV)</b>.</li>
     </ol>
     <div class="note">
       <b>Fluoroethane example:</b> six spins indexed <code>0 1 2 3 4 5</code>.
@@ -226,7 +213,7 @@
       <p>S<sub>interference</sub> collects cross terms of group amplitudes. It may be positive or negative; the total transition strength remains non-negative.</p>
     </div>
     <p>In the plot the thick colored line is the selected group, the thin gray line is <b>Total</b>, and the cyan line is <b>Interference</b>. The <b>Total</b> overlay is repeated in each local window for comparison; it is not an additional independent group. Negative interference indicates cancellation between amplitudes, <em>not negative measured absorption</em>.</p>
-    <p><b>Invariant DC:</b> numerically degenerate energy states can contribute at 0 Hz. The group CSV includes the invariant zero-frequency contribution; the dynamic group curves do not draw it as an AC peak. See <a href="#data-export">CSV export</a> for definitions and the exact sum rule.</p>
+    <p><b>Invariant DC:</b> numerically degenerate energy states can contribute at 0 Hz. The invariant group CSV retains the zero-frequency contribution, but the dynamic graph does not draw it as an AC spectral line. See <a href="#data-export">CSV export</a> for definitions and the exact sum rule.</p>
     <p><b>Scientific limitation:</b> these are relative squared operator matrix elements. The model does not include spin populations, pulse preparation, relaxation, receiver transfer functions, or calibrated experimental signal intensities. Assigning a group is an analysis choice, not a claim that it can be measured independently.</p>
   </section>
 
@@ -250,7 +237,7 @@
         <tr><td><b>Independent Y boundaries</b></td><td>Enter a lower or upper relative-intensity limit, including negative values. A single value applies to every plotted spin; a space-separated list assigns limits in display order. For example <code>Lower = -0.5</code> and <code>Upper = 0.2</code> magnifies weak group intensities and large negative interference. Leave either side empty for automatic scaling.</td></tr>
         <tr><td><b>Spectrum X boundaries</b></td><td>Optional independent limits relative to each panel's reference frequency, in Hz. Leave a field empty for automatic selection. For example, <code>Left = 0</code>, <code>Right = 120</code> shows 0–120 Hz in every panel. The <b>Show right side only</b> checkbox enters the left boundary 0; unchecking restores automatic left selection. Explicit bounds override the automatic or symmetric graph width.</td></tr>
         <tr><td><b>Advanced: edit group IDs</b></td><td>Provide exactly one group ID per spin (0–9), e.g. <code>0 0 0 1 1 2</code>. Manual assignments are preserved while editing until <b>Auto-detect groups</b> is selected.</td></tr>
-        <tr><td><b>Save set / Open set</b></td><td>Save or restore Hamiltonian and display parameters. When independent limits are specified, an optional final <code>XRange left right</code> record is appended after the legacy width line (use <code>auto</code> for an unspecified bound). The optional <code>YRange lower upper</code> record accepts comma-separated per-panel limits, with <code>auto</code> for unspecified bounds. Old <code>.set</code> files remain valid. Spin-group assignments are a separate web setting and <b>are not stored</b>; after reloading, review the proposed groups.</td></tr>
+        <tr><td><b>Save set / Open set</b></td><td>Save or restore the spin model and display settings. The legacy width record still contains two numbers, e.g. <code>0.2 0</code> for FWHM and automatic horizontal window. Optional <code>XRange left right</code> and <code>YRange lower upper</code> records set independent limits; <code>auto</code> leaves a side automatic. In the YRange file record, commas delimit per-panel values and decimal fractions use points. Opening older files with a nonzero fixed half-width converts that width to explicit X bounds. Spin-group assignments are a separate web setting and <b>are not stored</b> in .set files.</td></tr>
         <tr><td><b>Interactive mode</b></td><td>Open the computed spectrum in a new tab. Its navigation buttons labeled <b>Group 1</b>, etc., refer to <em>frequency clusters</em>, not to the spin-group IDs defined above.</td></tr>
       </tbody>
     </table>
@@ -260,8 +247,8 @@
   </section>
 
   <section>
-    <h2>12. Example input: tri-propyl phosphate</h2>
-    <p>The screenshots above show a six-spin reduced model for tri-propyl phosphate. The input can be represented in a <code>.set</code>-style form as:</p>
+    <h2>12. Example .set file and backward compatibility</h2>
+    <p>The following is an <b>illustrative reduced six-spin model</b>, not a validated complete molecular parameter set. Its format retains legacy fields and adds optional bounds:</p>
     <pre><code># TriPropylPhosphate
 42.578 42.578 42.578 42.578 42.578 17.24
 1.349 1.349 1.349 4.111 4.111 0
@@ -279,8 +266,11 @@
 4 5 8
 
 Graph 0 3 5
-30 15 7
-0.05 20</code></pre>
+0 0 0
+0.05 0
+XRange auto 20
+YRange -0.2 1</code></pre>
+    <p>The <code>0 0 0</code> legacy record requests automatic panel heights; <code>0.05 0</code> means FWHM 0.05 Hz with automatic X range, overridden by XRange when supplied. Modern browser input does not require typing these internal records.</p>
   </section>
 
   <section>
@@ -288,8 +278,8 @@ Graph 0 3 5
     <ul>
       <li>The number of gyromagnetic ratios must equal the number of chemical shifts.</li>
       <li>Spin indices in J-couplings must refer to existing spins.</li>
-      <li>The number of graph-height values should match the number of displayed spin numbers.</li>
-      <li>Use spaces between numbers. Avoid commas as decimal separators.</li>
+      <li>When both X or both Y bounds are entered, the lower/left limit must be smaller than the upper/right limit.</li>
+      <li>Both <code>0.25</code> and <code>0,25</code> are valid in the browser. Use spaces to separate list items; ambiguous comma-only lists are rejected.</li>
       <li>Use Hz for J-couplings and mT for the magnetic field.</li>
     </ul>
   </section>
@@ -298,13 +288,11 @@ Graph 0 3 5
   <h2>14. Interactive mode</h2>
 
   <p>
-    After a spectrum has been calculated, the standard preview image is shown in the main window.
-    To inspect the spectrum in more detail, click the <b>Interactive mode</b> button above the preview.
-    The interactive spectrum opens in a new browser tab.
+    After an ordinary spectrum is calculated, click <b>Interactive mode</b> above the preview to inspect it in a new tab. The group-resolved spectrum has its own graph and CSV export.
   </p>
   <figure>
       <img src="/static/1_10.png" alt="Interactive mode">
-      <figcaption>Interactive mode allows detailed inspection of the calculated spectrum.</figcaption>
+      <figcaption>Interactive ordinary spectrum viewer for zooming and inspecting the calculated curves.</figcaption>
   </figure>
 
   <p>
@@ -319,7 +307,7 @@ Graph 0 3 5
   </p>
   <figure>
       <img src="/static/1_11.png" alt="Interactive mode">
-      <figcaption>Interactive mode allows detailed inspection of the calculated spectrum.</figcaption>
+      <figcaption>The interactive viewer's Group 1, Group 2 etc. labels refer to <b>frequency regions</b>, not the observation groups selected in the main calculator.</figcaption>
   </figure>
 
   <p>
