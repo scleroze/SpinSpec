@@ -683,9 +683,10 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
 
     try:
         set_path = write_set_file(job_dir, payload)
-        make_graph_symlink(job_dir)
-        if payload.observer_groups:
-            make_group_graph_symlink(job_dir)
+        make_graph_symlink(job_dir)  # Legacy CLI compatibility.
+        # The engine uses group_graph as the unified renderer whenever
+        # it is present, even when no observer groups were requested.
+        make_group_graph_symlink(job_dir)
 
         process = run_command([str(ENGINE_BIN), set_path.name], cwd=job_dir,
                               env=observer_environment(payload))
