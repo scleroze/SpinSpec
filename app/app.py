@@ -168,6 +168,12 @@ def about_tr_page() -> HTMLResponse:
 def read_dev_spectrum(request: Request) -> HTMLResponse:
     return HTMLResponse((TEMPLATES_DIR / "dev_spectrum.html").read_text(encoding="utf-8"))
 
+@app.get("/changes", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/changes/", response_class=HTMLResponse, include_in_schema=False)
+def release_history() -> HTMLResponse:
+    return HTMLResponse((TEMPLATES_DIR / "changes.html").read_text(encoding="utf-8"))
+
+
 @app.get("/health")
 def healthcheck() -> dict:
     return {"status": "ok"}
