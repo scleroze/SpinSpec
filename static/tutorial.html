@@ -85,10 +85,7 @@
   <section>
     <h2>4. Gyromagnetic ratios</h2>
     <p>Enter gyromagnetic ratios in <b>MHz/T</b>, separated by spaces. For convenience, the expandable isotope list gives typical values.</p>
-    <figure>
-      <img src="/static/1_3.png" alt="Isotope gyromagnetic ratios">
-      <figcaption>The isotope list can be used as a reference for common nuclei.</figcaption>
-    </figure>
+    <div class="field"><b>Current field: Gyromagnetic ratios (MHz/T)</b><p>Example: <code>42.577 42.577 17.235</code>. Expand <b>Isotope γ values</b> and click an isotope to insert its value at the cursor.</p></div>
     <p>Click an isotope value in the expandable list to <b>insert it directly</b> into the <b>Gyromagnetic ratios (MHz/T)</b> field at the cursor position. No clipboard paste is needed.</p>
     <p>For example, a system with five protons and one phosphorus nucleus may be entered as:</p>
     <pre><code>42.578 42.578 42.578 42.578 42.578 17.24</code></pre>
@@ -131,17 +128,11 @@
   <section>
     <h2>6. Chemical shifts and magnetic field</h2>
     <p>Chemical shifts are entered in ppm, one value per spin. The order must exactly match the order of gyromagnetic ratios.</p>
-    <figure>
-      <img src="/static/1_4.png" alt="Chemical shifts and field input">
-      <figcaption>Example: five proton shifts and one phosphorus shift.</figcaption>
-    </figure>
+    <div class="field"><b>Current field: Chemical shifts (ppm)</b><p>Example six-spin input: <code>1.349 1.349 1.349 4.111 4.111 0</code>. The order follows Gyromagnetic ratios.</p></div>
     <p>Normally the external field is entered in mT. For example:</p>
     <pre><code>500</code></pre>
     <p>Alternatively, check <b>enter as ¹H frequency (MHz)</b> and enter one nominal proton Larmor frequency. The browser converts it to mT before calculation and when saving a <code>.set</code> file.</p>
-    <figure>
-      <img src="/static/1_5.png" alt="External magnetic field">
-      <figcaption>External field set to 500 mT.</figcaption>
-    </figure>
+    <div class="field"><b>Current field: External field</b><p>Enter <code>500</code> for 500 mT, or select <b>enter as ¹H frequency (MHz)</b> to supply the corresponding proton frequency instead.</p></div>
   </section>
 
   <section>
@@ -155,20 +146,14 @@
 2 5 0.9
 3 5 8
 4 5 8</code></pre>
-    <figure>
-      <img src="/static/1_6.png" alt="J-coupling input">
-      <figcaption>J-coupling values are entered line by line.</figcaption>
-    </figure>
+    <div class="field"><b>Current field: J-couplings</b><p>Enter one interaction per line, with space-separated spin indices and coupling constant. The interface accepts <code>0 5 0.9</code> and <code>0 5 0,9</code> equally.</p></div>
     <div class="note">Only one direction is required. For example, enter <code>0 5 0.9</code> or <code>0 5 0,9</code>; the coupling is symmetric. Separate the two spin indices and J value with spaces. Decimal commas are converted to dots before computation.</div>
   </section>
 
   <section>
     <h2>8. Choosing the displayed spectra</h2>
     <p><b>Displayed spin numbers</b> is a space-separated list of zero-based indices, for example <code>0 3 5</code>. It determines the ordinary spectrum panels, <b>not</b> which spins enter the Hamiltonian.</p>
-    <figure>
-      <img src="/static/1_7.png" alt="Example Displayed spin numbers field">
-      <figcaption>Example: spins 0, 3 and 5. Independent plot boundaries are now configured under Advanced spectrum settings.</figcaption>
-    </figure>
+    <div class="field"><b>Current field: Displayed spin numbers</b><p><code>0 3 5</code> selects three ordinary plot windows. The optional <b>Advanced spectrum settings</b> section below controls frequency and intensity limits.</p></div>
     <p>Every panel initially uses automatic vertical scaling. There is <b>no Graph heights field</b> in version 1.2. Enter a Y minimum or maximum only when you need a particular range. In group-resolved mode, SpinSpec automatically selects a reference window for each nonempty observer group.</p>
   </section>
 
