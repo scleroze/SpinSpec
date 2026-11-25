@@ -77,8 +77,8 @@
         <p>One vertical scale value per displayed spin. <code>0</code> selects automatic height; a positive number fixes the upper Y-axis limit. In group mode the negative axis remains automatic to show signed interference.</p>
       </div>
       <div class="field">
-        <b>Line width and spectrum width (Hz)</b>
-        <p>Two values in Hz: Lorentzian full width at half maximum (FWHM), followed by the half-width of the ordinary display window. Set the second value to <code>0</code> for automatic horizontal scale (including independently fitted group panels); any positive value is an exact manual half-width.</p>
+        <b>Line width (FWHM, Hz)</b>
+        <p>Enter one positive FWHM value. Spectrum windows are fitted automatically; use the independent X boundary fields in Advanced spectrum settings if manual limits are needed. The legacy <code>.set</code> format still stores two numbers, with the second set to <code>0</code> for automatic scaling.</p>
       </div>
     </div>
   </section>
@@ -179,12 +179,12 @@
 
   <section>
     <h2>9. Line width, spectral window, and calculation</h2>
-    <p>The final field contains two numbers:</p>
+    <p>The FWHM is now a separate numeric field under <b>Advanced spectrum settings</b>. The horizontal window is automatic until the user supplies one or both X boundaries.</p>
     <table>
       <thead><tr><th>Value</th><th>Meaning</th><th>Example</th></tr></thead>
       <tbody>
         <tr><td>Line width</td><td>Lorentzian full width at half maximum (FWHM), used for display broadening only.</td><td><code>0.5</code></td></tr>
-        <tr><td>Spectrum width</td><td>Half-width in Hz: <code>0</code> selects automatic X scaling; any positive number uses that exact half-width in ordinary and grouped plots.</td><td><code>0</code> (auto) or <code>100</code> (manual)</td></tr>
+        <tr><td>X boundaries</td><td>Optional independent frequency-offset limits. Blank means automatic for that boundary. When both are blank, the internal half-width is <code>0</code> (automatic).</td><td><code>Left = 0</code>, <code>Right = 100</code></td></tr>
       </tbody>
     </table>
     <figure>
@@ -243,7 +243,7 @@
         <tr><td><b>External field</b> and <b>enter as ¹H frequency (MHz)</b></td><td>Normally enter B in mT. With the checkbox selected, enter the nominal proton Larmor frequency in MHz; the browser converts it to B using <code>gamma_H = 42.57747892 MHz/T</code>. The calculation and saved <code>.set</code> file use mT.</td></tr>
         <tr><td><b>Displayed spin numbers</b></td><td>Zero-based indices select local reference windows, not which spins enter the Hamiltonian. In the web interface, group mode automatically uses one representative spin (the first spin by index) from each nonempty observer group for its display windows. This is independent of the list typed into <b>Displayed spin numbers</b>; ordinary mode keeps that list unchanged. The underlying Hamiltonian always includes every spin.</td></tr>
         <tr><td><b>Graph heights</b></td><td>Enter one value per displayed spin; <code>0</code> means automatic vertical scale. A positive value sets the upper Y-axis limit, which can clip strong peaks. In grouped spectra the negative extent is automatic unless a lower bound is explicitly specified.</td></tr>
-        <tr><td><b>Line width and spectrum width (Hz)</b></td><td>For example <code>1 220</code> means FWHM 1 Hz and a fixed half-width ±220 Hz in ordinary and grouped plots unless explicit left/right limits are entered. <code>1 0</code> means FWHM 1 Hz and automatic X scaling: each panel fits significant transitions with a safety margin. In zero field, automatic X begins at 0 Hz (negative absolute frequencies do not exist). All computed transitions and CSV remain unchanged.</td></tr>
+        <tr><td><b>Line width (FWHM, Hz)</b></td><td>Enter a single positive number, such as <code>1</code>. The interface writes <code>1 0</code> to the legacy width line in saved <code>.set</code> files, so horizontal scaling is automatic unless explicit X limits are supplied. Opening an older file with a fixed nonzero half-width converts that width into explicit left/right X limits. All computed transition frequencies and strengths remain unchanged.</td></tr>
         <tr><td><b>Advanced spectrum settings</b></td><td>FWHM, fixed graph heights and manual X/Y bounds are hidden inside a collapsible advanced section. Default widths and limits remain automatic.</td></tr>
         <tr><td><b>Independent Y boundaries</b></td><td>Enter a lower or upper relative-intensity limit, including negative values. A single value applies to every plotted spin; a space-separated list assigns limits in display order. For example <code>Lower = -0.5</code> and <code>Upper = 0.2</code> magnifies weak group intensities and large negative interference. Leave either side empty for automatic scaling.</td></tr>
         <tr><td><b>Spectrum X boundaries</b></td><td>Optional independent limits relative to each panel's reference frequency, in Hz. Leave a field empty for automatic selection. For example, <code>Left = 0</code>, <code>Right = 120</code> shows 0–120 Hz in every panel. The <b>Show right side only</b> checkbox enters the left boundary 0; unchecking restores automatic left selection. Explicit bounds override the automatic or symmetric graph width.</td></tr>
@@ -253,7 +253,7 @@
       </tbody>
     </table>
     <div class="note">
-      Automatic horizontal scaling (second width value <code>0</code>) and explicit left/right boundaries affect ordinary and grouped <b>display windows only</b>. It is not a selection rule for computed transitions. Because insignificant or distant lines may be outside the automatic window, use a positive manual width or the exported CSV to inspect the full calculated transitions.
+      Automatic horizontal scaling (empty X boundary fields, equivalent to legacy half-width <code>0</code>) and explicit left/right boundaries affect ordinary and grouped <b>display windows only</b>. They do not select quantum transitions. Distant or weak lines can lie outside the automatically chosen display range; use explicit X limits or the exported CSV to inspect them.
     </div>
   </section>
 
