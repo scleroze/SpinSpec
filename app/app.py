@@ -295,7 +295,10 @@ def validate_payload(payload: SpectrumRequest) -> None:
         raise HTTPException(status_code=400, detail="Left X boundary must be less than right X boundary.")
 
     # Independent intensity limits; one per displayed spin or one shared.
-    axes = observer_group_graph_layout(payload)[0].split()
+    try:
+        axes = observer_group_graph_layout(payload)[0].split()
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid observer-group assignment.")
     y_values = []
     for field, name in ((payload.y_min, "lower"), (payload.y_max, "upper")):
         values = field.replace(",", " ").split()
@@ -598,13 +601,13 @@ def check_rate_limit(ip: str) -> None:
     if q and now - q[-1] < MIN_SECONDS_BETWEEN_REQUESTS:
         raise HTTPException(
             status_code=429,
-            detail=f"Слишком частые запросы. Подождите {MIN_SECONDS_BETWEEN_REQUESTS} секунд.",
+            detail=f"Requests are too frequent. Please wait {MIN_SECONDS_BETWEEN_REQUESTS} seconds before trying again.",
         )
 
     if len(q) >= MAX_REQUESTS_PER_MINUTE:
         raise HTTPException(
             status_code=429,
-            detail="Слишком много запросов за минуту. Попробуйте позже.",
+            detail="Too many calculations in one minute. Please try again later.",
         )
 
     q.append(now)
