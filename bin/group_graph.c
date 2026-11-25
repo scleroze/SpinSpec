@@ -142,13 +142,19 @@ static void locate_reference(long frame,int group,int nspins,
         FILE *fp=fopen(path,"r");
         if(!fp)continue;  /* Some spin groups may have no displayed spin. */
         double shift=0,center=0,offset=0,intensity=0;
-        int good=(fscanf(fp,"%lf %lf",&shift,&center)==2 &&
-                  fscanf(fp,"%lf %lf",&offset,&intensity)==2);
+        int good=(fscanf(fp,"%lf %lf",&shift,&center)==2);
+        double max_offset=0;
+        int points=0;
+        while (good && fscanf(fp,"%lf %lf",&offset,&intensity)==2) {
+            if (!isfinite(offset)) { good=0; break; }
+            max_offset=fmax(max_offset,fabs(offset));
+            points++;
+        }
         fclose(fp);
-        if(good&&isfinite(center)&&center>=0&&
-           isfinite(offset)&&fabs(offset)>0){
+        if(good&&points>0&&isfinite(center)&&center>=0&&
+           max_offset>0){
             window->center=center;
-            window->half_width=fabs(offset);
+            window->half_width=max_offset;
             window->representative_spin=spin;
             return;
         }
@@ -384,26 +390,32 @@ int main(int argc,char **argv) {
         FILE *rf=fopen(path,"r");
         if(!rf)continue;  /* The spin was not selected in Graph. */
         double shift=0,center=0,offset=0,intensity=0;
-        int good=(fscanf(rf,"%lf %lf",&shift,&center)==2 &&
-                  fscanf(rf,"%lf %lf",&offset,&intensity)==2);
+        int good=(fscanf(rf,"%lf %lf",&shift,&center)==2);
+        double max_offset=0;
+        int samples=0;
+        while (good && fscanf(rf,"%lf %lf",&offset,&intensity)==2) {
+            if (!isfinite(offset)) { good=0; break; }
+            max_offset=fmax(max_offset,fabs(offset));
+            samples++;
+        }
         fclose(rf);
-        if(!good||!isfinite(center)||center<0||
-           !isfinite(offset)||fabs(offset)<=0){
+        if(!good||samples<1||!isfinite(center)||center<0||
+           max_offset<=0){
             fprintf(stderr,"Invalid local frequency reference: %s\n",path);
             free(lines);return 1;
         }
         DisplayPanel *p=&panels[panel_count++];
         p->spin=spin;p->group=g;p->center=center;
         p->half_width = auto_x
-            ? auto_group_half_width(lines, count, g, center, fabs(offset), fwhm)
-            : fabs(offset);
+            ? auto_group_half_width(lines, count, g, center, max_offset, fwhm)
+            : max_offset;
         if (isfinite(left_override))
             p->half_width = fmax(p->half_width, fabs(left_override));
         if (isfinite(right_override))
             p->half_width = fmax(p->half_width, fabs(right_override));
         fprintf(stderr,
                 "GROUP X-RANGE group=%d spin=%d mode=%s requested=%.6g selected=%.6g Hz\n",
-                g, spin, auto_x ? "auto" : "manual", fabs(offset), p->half_width);
+                g, spin, auto_x ? "auto" : "manual", max_offset, p->half_width);
         if(windows[g].occupied && windows[g].representative_spin==spin &&
            fabs(p->center-windows[g].center)<1e-7 &&
            fabs(p->half_width-windows[g].half_width)<1e-7){
