@@ -1030,7 +1030,7 @@
         try {
           return await redrawFromTransitions(data);
         } catch (error) {
-          if (!/HTTP 409(?:\\D|$)/.test(error.message)) throw error;
+          if (!/^HTTP 409:/.test(error.message)) throw error;
         }
       }
       return sendRequest('/api/calculate', data);
@@ -1489,8 +1489,8 @@
     // Update the prediction as soon as the user edits a field, loads a
     // .set file or changes the group assignment. No calculation is started.
     const form = document.getElementById('nmrForm');
-    form.addEventListener('input', updateCalculationMode);
-    form.addEventListener('change', updateCalculationMode);
+    form.addEventListener('input', () => queueMicrotask(updateCalculationMode));
+    form.addEventListener('change', () => queueMicrotask(updateCalculationMode));
     proposeSpinGroups();
     updateCalculationMode();
 
