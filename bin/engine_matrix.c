@@ -64,6 +64,39 @@ int read_line_or_exit(FILE *file, char *line, size_t line_size) {
 
 
 /* Sort transition pairs by frequency. */
+/* Apply optional per-Graph-panel YRange values to the common renderer.
+ * A single number applies to all displayed panels; auto removes the bound. */
+static int ss_apply_y_limits(const char *name, const char *spec,
+                             const int *spins, int count)
+{
+    if(!spec || !*spec) return 0;
+    char input[512];
+    if(strlen(spec)>=sizeof(input)) return -1;
+    strcpy(input,spec);
+    char *values[128],*save=NULL;
+    int n=0;
+    for(char *p=strtok_r(input,",",&save);p;
+        p=strtok_r(NULL,",",&save)){
+        if(n>=128)return -1;
+        values[n++]=p;
+    }
+    if(n!=1 && n!=count)return -1;
+    char output[2048]={0};
+    size_t length=0;
+    for(int i=0;i<count;i++){
+        const char *raw=values[n==1?0:i];
+        if(strcmp(raw,"auto")==0)continue;
+        char *tail=NULL;
+        double v=strtod(raw,&tail);
+        if(tail==raw || *tail || !isfinite(v))return -1;
+        int written=snprintf(output+length,sizeof(output)-length,
+            "%s%d:%.17g",length?",":"",spins[i],v);
+        if(written<0 || (size_t)written>=sizeof(output)-length)return -1;
+        length+=(size_t)written;
+    }
+    return setenv(name,output,1)==0 ? 0 : -1;
+}
+
 static int ss_compare_frequency(const void *a, const void *b)
 {
     const double fa = ((const double *)a)[0];
@@ -348,6 +381,7 @@ int main(int argc, char *argv[]) {
  */
 double fwhm_hz, WidthLine, WidthSpectrum;
 double x_left_override = NAN, x_right_override = NAN;
+char y_min_requested[512]={0}, y_max_requested[512]={0};
 if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
     !isfinite(fwhm_hz) || fwhm_hz <= 0.0 ||
     !isfinite(WidthSpectrum) || WidthSpectrum < 0.0) {
@@ -365,9 +399,11 @@ if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
             char *p = skip_spaces(trailing);
             if (*p == '\0' || *p == '\n' || *p == '#') continue;
             if (strncmp(p, "YRange ", 7) == 0) {
-                /* YRange is a display-only extension. The web app sends
-                 * validated per-spin bounds to the renderer via environment.
-                 * Standalone .set readers may safely ignore this line. */
+                if(sscanf(p,"YRange %511s %511s %c",
+                          y_min_requested,y_max_requested,&extra)!=2){
+                    fprintf(stderr,"Invalid optional YRange record.\n");
+                    fclose(file);return EXIT_FAILURE;
+                }
                 continue;
             }
             if (sscanf(p, "XRange %127s %127s %c",
@@ -405,6 +441,11 @@ if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
     }
 }
    fclose(file);
+if(ss_apply_y_limits("SPINSPEC_Y_MIN",y_min_requested,Sgm,Sg)!=0 ||
+   ss_apply_y_limits("SPINSPEC_Y_MAX",y_max_requested,Sgm,Sg)!=0){
+    fprintf(stderr,"Invalid YRange: one value or one per Graph panel expected.\n");
+    return EXIT_FAILURE;
+}
 double gamma = fwhm_hz / 2.0;
 WidthLine = gamma * gamma;
 /*
