@@ -61,7 +61,7 @@ import json
 import re
 source = parsed.contents[0]
 begin = source.index("    function decodeSetDisplayWidth(")
-end = source.index("\\n    function fillFormFromSet(", begin)
+end = source.index("\n    function fillFormFromSet(", begin)
 function_src = source[begin:end]
 cases = [
     ("1 0", "", {"fwhm": "1", "left": "", "right": ""}),
@@ -73,7 +73,7 @@ cases = [
     ("0.5 0", "XRange auto -10",
      {"fwhm": "0.5", "left": "", "right": "-10"}),
 ]
-node_js = function_src + "\\n" + "\\n".join(
+node_js = function_src + "\n" + "\n".join(
     "console.log(JSON.stringify(decodeSetDisplayWidth(" +
     json.dumps(width) + "," + json.dumps(xrange) + ")));"
     for width, xrange, _ in cases
