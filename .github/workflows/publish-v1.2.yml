@@ -1,0 +1,78 @@
+name: Publish verified SpinSpec v1.2.0
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish-v1-2:
+    if: contains(github.event.head_commit.message, '[publish v1.2.0]')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v4
+
+      - name: Verify release metadata and notes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          cff = Path('CITATION.cff').read_text()
+          notes = Path('docs/release-notes-v1.2.md').read_text()
+          readme = Path('README.md').read_text()
+          assert 'version: 1.2.0' in cff
+          assert 'date-released: 2026-11-25' in cff
+          assert 'SpinSpec v1.2.0' in notes
+          assert 'M_z' in notes
+          assert '22×' in notes and '49×' in notes
+          assert 'eight spin' in readme.lower()
+          print('Release metadata: PASS')
+          PY
+
+      - name: Install scientific dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgsl-dev gnuplot-nox python3-numpy
+
+      - name: Build current numerical engine and plotting utilities
+        run: |
+          set -euo pipefail
+          gcc -O2 -fopenmp bin/engine_matrix.c -o bin/engine_matrix -lgsl -lgslcblas -lm
+          gcc -O2 bin/matrix_graph.c bin/GnuGraph.c -o bin/matrix_graph -lm
+          gcc -std=c11 -O2 -Wall -Wextra bin/group_graph.c -o bin/group_graph -lm
+          gcc -std=c11 -O2 -Wall -Wextra bin/replot_spectrum.c -o bin/replot_spectrum -lm
+          gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_groups.c -o tests/test_observer_groups -lm
+          gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_invariant.c -o tests/test_observer_invariant -lm
+
+      - name: Run analytical, invariance and multispin numerical regressions
+        run: |
+          set -euo pipefail
+          ./tests/test_observer_groups
+          ./tests/test_observer_invariant
+          cd bin
+          OMP_NUM_THREADS=1 /usr/bin/python3 ../tests/test_hp_analytic.py
+          OMP_NUM_THREADS=1 /usr/bin/python3 ../tests/test_multispin_reference.py
+          OMP_NUM_THREADS=1 /usr/bin/python3 ../tests/test_invariant_reference.py
+          OMP_NUM_THREADS=1 /usr/bin/python3 ../tests/test_unified_observer.py
+
+      - name: Verify cached replot, ordinary/grouped render and browser inputs
+        run: |
+          set -euo pipefail
+          OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python3 tests/test_replot.py
+          OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python3 tests/test_unified_renderer.py
+          python3 tests/test_auto_replot_ui.py
+          python3 -m py_compile app/app.py
+
+      - name: Publish immutable source snapshot as GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v1.2.0 >/dev/null 2>&1; then
+            echo 'v1.2.0 already exists; refusing to overwrite the tagged release.'
+            exit 1
+          fi
+          gh release create v1.2.0 --target "${GITHUB_SHA}" --title 'SpinSpec v1.2.0 — Faster exact NMR simulation' --notes-file docs/release-notes-v1.2.md
