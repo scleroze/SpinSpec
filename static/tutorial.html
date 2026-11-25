@@ -237,6 +237,13 @@
 
   <section id="additional-settings">
     <h2>11. Additional settings and display controls</h2>
+    <p><b>Decimal separators:</b> SpinSpec accepts both <code>0.25</code> and
+    <code>0,25</code> in browser input fields, including FWHM, X/Y limits,
+    gyromagnetic ratios, shifts, magnetic field and J-couplings.
+    For numeric lists, put spaces between values: <code>42,577 17,235</code>.
+    An ambiguous string such as <code>42,577,17,235</code> is rejected.
+    Files saved by SpinSpec always use a decimal point to preserve compatibility
+    with the C engine and the traditional <code>.set</code> format.</p>
     <table>
       <thead><tr><th>Control</th><th>Behavior</th></tr></thead>
       <tbody>
