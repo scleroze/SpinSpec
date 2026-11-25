@@ -531,17 +531,18 @@
           <summary>Advanced spectrum settings (linewidth and plot axes)</summary>
           <div class="field">
             <label for="lineWidth">Line width (FWHM, Hz)</label>
-            <input id="lineWidth" name="lineWidth" type="number" min="0" step="any"
-                   value="0.5" placeholder="For example: 0.5" />
-            <div class="hint">Positive line width. The frequency window is
-              automatic unless you enter X boundaries below.</div>
+            <input id="lineWidth" name="lineWidth" type="text" inputmode="decimal"
+                   value="0.5" placeholder="For example: 0.5 or 0,5" />
+            <div class="hint">Positive line width. Both decimal point and decimal comma
+              are accepted (0.5 or 0,5). The frequency window is automatic
+              unless you enter X boundaries below.</div>
           </div>
           <div class="field">
             <label>Spectrum X boundaries (frequency offset, Hz; optional)</label>
             <div style="display:flex;gap:8px">
-              <input id="xLeft" name="xLeft" type="number" step="any"
+              <input id="xLeft" name="xLeft" type="text" inputmode="decimal"
                      placeholder="Left (auto)" aria-label="Left frequency boundary" />
-              <input id="xRight" name="xRight" type="number" step="any"
+              <input id="xRight" name="xRight" type="text" inputmode="decimal"
                      placeholder="Right (auto)" aria-label="Right frequency boundary" />
             </div>
             <label class="check-row">
@@ -549,8 +550,8 @@
               Show right side only (left = 0 Hz)
             </label>
             <div class="hint">Leave both limits empty for automatic scaling
-              (legacy spectrum half-width = 0). Enter either boundary
-              to override just that side.</div>
+              (legacy spectrum half-width = 0). Enter either boundary to
+              override just that side; both 0.25 and 0,25 are accepted.</div>
           </div>
           <div class="field">
             <label>Independent Y limits (relative intensity)</label>
@@ -560,8 +561,10 @@
               <input id="yMax" name="yMax" type="text" placeholder="Upper: auto or 0.1 2"
                      aria-label="Upper intensity bounds" />
             </div>
-            <div class="hint">One value applies to all displayed panels; multiple values follow the
-              displayed-spin order. Leave blank for automatic scaling. Negative Y is allowed.</div>
+            <div class="hint">One value applies to all displayed panels; multiple values are
+              separated by spaces and follow the displayed-spin order. Both
+              decimal separators are accepted (for example, -0,25 0,5).
+              Leave blank for automatic scaling. Negative Y is allowed.</div>
           </div>
         </details>
 
@@ -783,7 +786,8 @@
 
       interactiveButton.style.display = "inline-block";
       interactiveButton.onclick = () => {
-        const lineWidth = document.getElementById("lineWidth").value.trim() || "0.5";
+        const rawLineWidth = document.getElementById("lineWidth").value.trim() || "0.5";
+        const lineWidth = normalizeDecimalToken(rawLineWidth, 'Line width (FWHM)');
 
         window.open(
           `/dev-spectrum?job=${result.job_id}&linewidth=${encodeURIComponent(lineWidth)}`,
@@ -848,6 +852,71 @@
       el.style.color = isError ? "red" : "black";
     }
 
+    // Locale-independent numeric input. The browser accepts both decimal
+    // separators, while the C engine and .set files always receive dots.
+    // Lists are separated with whitespace, never with ambiguous digit commas.
+    const decimalPattern =
+      /^[+-]?(?:\\d+(?:[.,]\\d*)?|[.,]\\d+)(?:[eE][+-]?\\d+)?$/;
+
+    function normalizeDecimalToken(token, label) {
+      const value = token.trim();
+      if (!decimalPattern.test(value))
+        throw new Error(`Invalid ${label}: "${value}". Use 0.25 or 0,25.`);
+      const canonical = value.replace(',', '.');
+      if (!Number.isFinite(Number(canonical)))
+        throw new Error(`Invalid ${label}: the number must be finite.`);
+      return canonical;
+    }
+
+    function normalizeNumericList(raw, label, allowAuto = false) {
+      const text = raw.replace(/\\r/g, '').trim();
+      if (!text) return '';
+      // A comma followed by whitespace is unambiguously a list delimiter.
+      // A comma between digits is decimal, e.g. 42,577 17,235.
+      const tokens = text.replace(/,\\s+/g, ' ').split(/\\s+/).filter(Boolean);
+      const result = [];
+      for (const token of tokens) {
+        if (allowAuto && token.toLowerCase() === 'auto') {
+          result.push('auto');
+          continue;
+        }
+        const commas = (token.match(/,/g) || []).length;
+        if (commas > 1) {
+          throw new Error(
+            `Ambiguous ${label}: "${token}". Separate numbers with spaces; ` +
+            'a comma inside a number is its decimal separator.'
+          );
+        }
+        // Keep old unambiguous lists written as 42.577,17.235.
+        const elements = commas === 1 && token.includes('.')
+          ? token.split(',')
+          : [token];
+        for (const element of elements) {
+          result.push(normalizeDecimalToken(element, label));
+        }
+      }
+      return result.join(' ');
+    }
+
+    function normalizeCouplingRows(raw) {
+      return raw.replace(/\\r/g, '').split('\\n').map(line => {
+        const text = line.trim();
+        if (!text) return '';
+        const values = normalizeNumericList(text, 'J-coupling row').split(/\\s+/);
+        if (values.length !== 3 ||
+            !/^\\d+$/.test(values[0]) || !/^\\d+$/.test(values[1]))
+          throw new Error(
+            'Each J-coupling row must contain two integer spin indices and one J value.'
+          );
+        return values.join(' ');
+      }).filter(Boolean).join('\\n');
+    }
+
+    function optionalDecimal(id, label) {
+      const value = document.getElementById(id).value.trim();
+      return value ? normalizeDecimalToken(value, label) : '';
+    }
+
     function automaticGraphHeights() {
       // Legacy .set requires one height per displayed spin. Graph height
       // zero means automatic and is now implicit in the interface.
@@ -857,28 +926,37 @@
     }
 
     function getLinewidthsForEngine() {
-      const fwhm = document.getElementById('lineWidth').value.trim();
-      if (!fwhm || !Number.isFinite(Number(fwhm)) || Number(fwhm) <= 0)
+      const raw = document.getElementById('lineWidth').value.trim();
+      if (!raw)
         throw new Error('Line width (FWHM) must be a positive number in Hz.');
+      const fwhm = normalizeDecimalToken(raw, 'Line width (FWHM)');
+      if (Number(fwhm) <= 0)
+        throw new Error('Line width (FWHM) must be positive.');
       // The legacy engine still expects two values. A zero half-width
       // selects automatic scaling; independent X limits now control zoom.
       return `${fwhm} 0`;
     }
 
     function getFormData() {
+      const gammas = normalizeNumericList(
+        document.getElementById('gammas').value, 'gyromagnetic ratios');
+      const shifts = normalizeNumericList(
+        document.getElementById('shifts').value, 'chemical shifts');
+      if (gammas && shifts && gammas.split(/\\s+/).length !== shifts.split(/\\s+/).length)
+        throw new Error('The number of chemical shifts must equal the number of spins.');
       return {
         title: document.getElementById('title').value.trim(),
-        gammas: document.getElementById('gammas').value.trim(),
-        shifts: document.getElementById('shifts').value.trim(),
+        gammas,
+        shifts,
         field: getFieldValueForCalculation(),
-        jcouplings: document.getElementById('jcouplings').value.replace(/\r/g, '').trim(),
+        jcouplings: normalizeCouplingRows(document.getElementById('jcouplings').value),
         graph: document.getElementById('graph').value.trim(),
         heights: automaticGraphHeights(),
         linewidths: getLinewidthsForEngine(),
-        x_left: document.getElementById('xLeft').value.trim(),
-        x_right: document.getElementById('xRight').value.trim(),
-        y_min: document.getElementById('yMin').value.trim(),
-        y_max: document.getElementById('yMax').value.trim(),
+        x_left: optionalDecimal('xLeft', 'left X boundary'),
+        x_right: optionalDecimal('xRight', 'right X boundary'),
+        y_min: normalizeNumericList(document.getElementById('yMin').value, 'lower Y limits', true),
+        y_max: normalizeNumericList(document.getElementById('yMax').value, 'upper Y limits', true),
         observer_groups: getSelectedObserverGroups(),
       };
     }
@@ -910,14 +988,18 @@
     function getFieldValueForCalculation() {
       const raw = document.getElementById("field").value.trim();
       const asFreq = document.getElementById("fieldAsProtonFrequency").checked;
-
-      if (!asFreq) return raw;
-
-      const nuMHz = parseFloat(raw.replace(",", "."));
-      const gammaH = 42.57747892; // MHz/T
-      const field_mT = (nuMHz / gammaH) * 1000.0;
-
-      return String(field_mT);
+      const canonical = normalizeNumericList(raw, 'external field');
+      if (!canonical) throw new Error('External field is required.');
+      const values = canonical.split(/\\s+/);
+      if (asFreq) {
+        if (values.length !== 1)
+          throw new Error('Proton frequency must be a single value in MHz.');
+        const gammaH = 42.57747892; // MHz/T
+        return String((Number(values[0]) / gammaH) * 1000.0);
+      }
+      if (values.length !== 1 && values.length !== 3)
+        throw new Error('External field requires one value or start, stop and step.');
+      return canonical;
     }
 
     // Convert the legacy `FWHM half-width` record to the new form.
@@ -1386,11 +1468,9 @@
     let groupChangeTimer = null;
 
     function parseNumericList(text, name) {
-      const tokens = text.replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean);
-      if (!tokens.length) throw new Error(`${name} is empty.`);
-      const values = tokens.map(Number);
-      if (values.some(x => !Number.isFinite(x))) throw new Error(`Invalid ${name}.`);
-      return values;
+      const normalized = normalizeNumericList(text, name);
+      if (!normalized) throw new Error(`${name} is empty.`);
+      return normalized.split(/\\s+/).map(Number);
     }
 
     function getSpinModel() {
@@ -1405,7 +1485,7 @@
       for (const raw of lines) {
         const line = raw.trim();
         if (!line || line.startsWith('#')) continue;
-        const parts = line.replace(/,/g, ' ').split(/\s+/);
+        const parts = normalizeNumericList(line, 'J-coupling row').split(/\\s+/);
         if (parts.length !== 3) throw new Error(`Invalid J-coupling row: "${line}".`);
         const [a, b, v] = parts.map(Number);
         if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n || a === b || !Number.isFinite(v)) {
