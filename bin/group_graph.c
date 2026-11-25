@@ -185,6 +185,140 @@ static void locate_reference(long frame,int group,int nspins,
     }
 }
 
+
+/*
+ * Shared Gnuplot backend: ordinary spectra from saved Res/Sp files.
+ * This is also invoked in group mode to retain the ordinary image export.
+ * In group mode the same executable then draws the invariant overlays.
+ */
+static int render_ordinary(long frame, const char *model_file) {
+    FILE *cfg=fopen(model_file,"r");
+    if(!cfg){perror(model_file);return 1;}
+    char text[MAX_LINE];
+    int selected[MAX_SPINS], selected_n=0;
+    double requested_heights[MAX_SPINS]={0};
+    int found=0;
+    while(fgets(text,sizeof(text),cfg)){
+        if(strncmp(text,"Graph ",6)==0){found=1;break;}
+    }
+    if(!found){fclose(cfg);fprintf(stderr,"Missing Graph line\n");return 1;}
+    char *save=NULL;
+    for(char *tok=strtok_r(text+6," \t\r\n",&save);tok;
+        tok=strtok_r(NULL," \t\r\n",&save)){
+        char *end=NULL;
+        long spin=strtol(tok,&end,10);
+        if(*end || end==tok || spin<0 || spin>=MAX_SPINS ||
+           selected_n>=MAX_SPINS){
+            fclose(cfg);fprintf(stderr,"Invalid Graph index\n");return 1;
+        }
+        selected[selected_n++]=(int)spin;
+    }
+    if(!selected_n || !fgets(text,sizeof(text),cfg)){
+        fclose(cfg);return 1;
+    }
+    save=NULL;
+    int h=0;
+    for(char *tok=strtok_r(text," \t\r\n",&save);tok && h<selected_n;
+        tok=strtok_r(NULL," \t\r\n",&save)){
+        char *end=NULL;
+        double height=strtod(tok,&end);
+        if(end==tok || *end || !isfinite(height)){
+            fclose(cfg);fprintf(stderr,"Invalid graph height\n");return 1;
+        }
+        requested_heights[selected[h++]]=height;
+    }
+    fclose(cfg);
+    if(h!=selected_n){fprintf(stderr,"Graph heights mismatch\n");return 1;}
+
+    double y_lower[MAX_SPINS],y_upper[MAX_SPINS];
+    if(read_y_limits("SPINSPEC_Y_MIN",y_lower) ||
+       read_y_limits("SPINSPEC_Y_MAX",y_upper)){
+        fprintf(stderr,"Invalid ordinary Y limits\n");return 2;
+    }
+    char transition_name[128],dc_name[128],out[128],script[128];
+    snprintf(transition_name,sizeof(transition_name),"Sp_%05ld.dat",frame);
+    snprintf(dc_name,sizeof(dc_name),"Sp_dc_%05ld.dat",frame);
+    snprintf(out,sizeof(out),"data_%05ld.jpg",frame);
+    snprintf(script,sizeof(script),"ordinary_plot_%05ld.gp",frame);
+    FILE *pairs=fopen(transition_name,"r");
+    if(!pairs){perror(transition_name);return 1;}
+    if(!fgets(text,sizeof(text),pairs)){fclose(pairs);return 1;}
+    double max_freq=0,frequency=0,strength=0;
+    int idx,i,j,lookup;
+    while(fscanf(pairs,"%d %lf %lf %d %d %d",
+                 &idx,&frequency,&strength,&i,&j,&lookup)==6){
+        if(isfinite(frequency) && isfinite(strength) &&
+           strength>1e-12 && frequency>1e-9 && frequency>max_freq)
+            max_freq=frequency;
+    }
+    fclose(pairs);
+    if(max_freq<1e-9) max_freq=40;
+
+    FILE *gp=fopen(script,"w");
+    if(!gp){perror(script);return 1;}
+    fprintf(gp,"set terminal jpeg size 1800,%d enhanced font 'Sans,15'\n",
+            360*selected_n+150);
+    fprintf(gp,"set output '%s'\n",out);
+    fprintf(gp,"set multiplot title 'SpinSpec: NMR spectra' font 'Sans,20'\n");
+    fprintf(gp,"set grid xtics ytics\nset key off\n");
+    fprintf(gp,"set origin 0,0.86\nset size 1,0.12\n");
+    fprintf(gp,"unset ytics\nset border 1\nunset grid\n");
+    fprintf(gp,"set lmargin 10\nset rmargin 4\n");
+    fprintf(gp,"unset title\nset xlabel 'Absolute frequency (Hz)'\n");
+    fprintf(gp,"unset ylabel\nset xrange [0:%.17g]\nset yrange [0:*]\n",
+            max_freq*1.05);
+    fprintf(gp,"plot '%s' skip 1 using ($3>1e-12 && $2>1e-9 ? $2 : 1/0):3 with impulses lw 1.4 lc rgb '#555555' notitle, ",
+            transition_name);
+    fprintf(gp,"'%s' skip 1 using 1:2 with impulses lw 2 lc rgb '#999999' notitle\n",dc_name);
+    fprintf(gp,"set ytics autofreq\nset border 15\nset grid xtics ytics\n");
+    static const char *colors[]={"#146aff","#d73151","#16833a","#b25bc9",
+        "#d46900","#009a9a","#994100","#668800","#5555aa","#333333"};
+    const double row_height=0.83/selected_n;
+    for(int panel=0;panel<selected_n;panel++){
+        const int spin=selected[panel];
+        char res_name[128];
+        snprintf(res_name,sizeof(res_name),"Res_%d_%05ld.dat",spin,frame);
+        FILE *res=fopen(res_name,"r");
+        if(!res){perror(res_name);fclose(gp);return 1;}
+        double shift=0,center=0,x=0,y=0,peak=0;
+        int good=fscanf(res,"%lf %lf",&shift,&center)==2;
+        int count=0;
+        while(good && fscanf(res,"%lf %lf",&x,&y)==2){
+            if(!isfinite(x)||!isfinite(y)){good=0;break;}
+            if(y>peak) peak=y;
+            ++count;
+        }
+        fclose(res);
+        if(!good || count<2 || !isfinite(center)){
+            fprintf(stderr,"Invalid ordinary Res file %s\n",res_name);
+            fclose(gp);return 1;
+        }
+        double ymin=isfinite(y_lower[spin])?y_lower[spin]:0.;
+        double ymax=isfinite(y_upper[spin])?y_upper[spin]:
+            (requested_heights[spin]>0 ? requested_heights[spin] :
+             (peak>0 ? 1.08*peak : 1.0));
+        if(!(ymin<ymax)){fclose(gp);fprintf(stderr,"Invalid ordinary Y range\n");return 2;}
+        fprintf(gp,"set origin 0,%.12g\nset size 1,%.12g\n",
+                (selected_n-1-panel)*row_height,row_height);
+        fprintf(gp,"set lmargin 10\nset rmargin 4\n");
+        fprintf(gp,"set title 'Spin %d, reference %.8g Hz'\n",spin,center);
+        fprintf(gp,"set xlabel 'Frequency offset (Hz)'\n");
+        fprintf(gp,"set ylabel 'Relative strength'\n");
+        fprintf(gp,"set xrange [*:*]\n");
+        fprintf(gp,"set yrange [%.17g:%.17g]\n",ymin,ymax);
+        fprintf(gp,"plot '%s' skip 1 using 1:2 with lines lw 2 lc rgb '%s' notitle\n",
+                res_name,colors[panel % 10]);
+    }
+    fprintf(gp,"unset multiplot\nunset output\n");
+    if(fclose(gp)!=0){perror(script);return 1;}
+    char command[256];
+    snprintf(command,sizeof(command),"gnuplot < %s",script);
+    if(system(command)!=0){
+        fprintf(stderr,"Ordinary Gnuplot failed: %s\n",script);return 1;
+    }
+    return 0;
+}
+
 int main(int argc,char **argv) {
     if(argc<2||argc>4) {
         fprintf(stderr,"usage: %s FRAME [FWHM_HZ] [SPECTRUM_HALF_WIDTH_HZ]\n",argv[0]);
@@ -223,6 +357,22 @@ int main(int argc,char **argv) {
     }
     if (isfinite(left_override) && isfinite(right_override) &&
         left_override >= right_override) return 2;
+
+    const char *model_file=getenv("SPINSPEC_MODEL_FILE");
+    if(model_file && *model_file) {
+        int ordinary_status=render_ordinary(frame,model_file);
+        if(ordinary_status) return ordinary_status;
+    }
+    /* A single renderer handles both ordinary and invariant-group views.
+     * Without observer groups only the ordinary spectra are rendered. */
+    const char *membership=getenv("SPINSPEC_OBSERVER_GROUPS");
+    if(!membership || !*membership) {
+        if(!model_file || !*model_file) {
+            fprintf(stderr,"Ordinary plot requires SPINSPEC_MODEL_FILE\n");
+            return 2;
+        }
+        return 0;
+    }
 
     char in[128],out[128],curve[128];
     snprintf(in,sizeof(in),"Sp_invariant_%05ld.csv",frame);
