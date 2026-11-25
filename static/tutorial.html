@@ -198,7 +198,7 @@
       <p>S<sub>interference</sub> collects cross terms of group amplitudes. It may be positive or negative; the total transition strength remains non-negative.</p>
     </div>
     <p>In the plot the thick colored line is the selected group, the thin gray line is <b>Total</b>, and the cyan line is <b>Interference</b>. The <b>Total</b> overlay is repeated in each local window for comparison; it is not an additional independent group. Negative interference indicates cancellation between amplitudes, <em>not negative measured absorption</em>.</p>
-    <p><b>Invariant DC:</b> numerically degenerate energy states can contribute at 0 Hz. The invariant group CSV retains the zero-frequency contribution, but the dynamic graph does not draw it as an AC spectral line. See <a href="#data-export">CSV export</a> for definitions and the exact sum rule.</p>
+    <p><b>Invariant DC:</b> numerically degenerate energy states can contribute at 0 Hz. The invariant group CSV retains the zero-frequency contribution. The overview can show DC at 0 Hz, and a local Lorentz-broadened curve can include its contribution when its frequency window covers 0 Hz. This is not an independently observed AC resonance. See <a href="#data-export">CSV export</a> for definitions and the exact sum rule.</p>
     <p><b>Scientific limitation:</b> these are relative squared operator matrix elements. The model does not include spin populations, pulse preparation, relaxation, receiver transfer functions, or calibrated experimental signal intensities. Assigning a group is an analysis choice, not a claim that it can be measured independently.</p>
   </section>
 
@@ -352,8 +352,7 @@ YRange -0.2 1</code></pre>
        <code>sum_k (gamma_k/gamma_H) I_kx</code> with spins partitioned by group ID.
        Thus group strengths alone need <b>not</b> add up to the total.</p>
     <div class="note">
-      Rows with <code>frequency_hz = 0</code> are retained in the invariant CSV, but the
-      plotted dynamic group spectrum omits this DC contribution. The ordinary and group modes
+      Rows with <code>frequency_hz = 0</code> are retained in the invariant CSV. The group overview can show this contribution at 0 Hz; local Lorentz-broadened curves can include it if their windows cover 0 Hz. The ordinary and group modes
       use the <b>same gamma-weighted observation operator</b>. Their exported rows are organized
       differently (eigenstate pairs versus invariant energy blocks), and numerical strengths should
       be compared after appropriate frequency or energy-block aggregation, not by state labels.

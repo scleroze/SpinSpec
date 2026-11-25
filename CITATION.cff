@@ -4,8 +4,8 @@ message: >-
   publication, thesis, or presentation, please cite this software.
 type: software
 license: GPL-3.0-or-later
-version: 1.1.0
-date-released: 2026-11-18
+version: 1.2.0
+date-released: 2026-11-25
 title: "SpinSpec: Quantum simulation of NMR spectra"
 authors:
   - family-names: Kupriyanov
@@ -15,8 +15,11 @@ abstract: >-
   SpinSpec computes transition frequencies and relative spectral intensities
   for coupled spin-1/2 nuclear magnetic resonance systems by constructing
   and diagonalizing the spin Hamiltonian, with Zeeman and scalar J couplings.
-  Version 1.1 adds optional gamma-weighted group-resolved operator strengths,
-  coherent interference terms, and basis-invariant degenerate-level spectra.
+  The exact Hamiltonian diagonalization uses conserved total-Mz blocks.
+  Both observation modes use a signed gamma-weighted transverse operator;
+  optional group-resolved output includes coherent interference and invariant
+  degenerate-energy-block transition strengths. Version 1.2 adds optimized
+  transitions, cached spectrum replotting and independent plot-axis controls.
 repository-code: "https://github.com/scleroze/SpinSpec"
 url: "https://nmrspec.org"
 keywords:

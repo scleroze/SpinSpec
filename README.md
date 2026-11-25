@@ -6,9 +6,19 @@ Online project: https://nmrspec.org
 
 [![Zenodo DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23696822.svg)](https://doi.org/10.5281/zenodo.23696822)
 
-**Archived scientific release:** [SpinSpec v1.0.0](https://doi.org/10.5281/zenodo.23696822), DOI: [10.5281/zenodo.23696822](https://doi.org/10.5281/zenodo.23696822).
+**Current release:** [SpinSpec v1.2.0](https://github.com/scleroze/SpinSpec/releases/tag/v1.2.0) (25 November 2026). The [v1.0.0 archived scientific release](https://doi.org/10.5281/zenodo.23696822) has DOI [10.5281/zenodo.23696822](https://doi.org/10.5281/zenodo.23696822); that DOI refers to v1.0.0, not v1.2.0.
 
-## Group-resolved spin spectra (v1.1)
+## What's new in SpinSpec 1.2.0
+
+- Exact symmetric Hamiltonian diagonalization is partitioned by conserved total spin projection, **M_z**, with the full product-basis Hamiltonian still constructed before individual sectors are diagonalized using GSL.
+- Faster signed gamma-weighted observer transformations. The measured nine-spin benchmark speedups relative to the reference engine were approximately **22× at 3 T** and **49× at zero field**; results depend on the model and hardware. The **public web calculator is limited to eight spins**.
+- The web interface automatically **replots** when only linewidth, plot windows, or independent X/Y limits change; the previously computed transitions are reused without diagonalization.
+- One positive **FWHM** field, independent optional X and Y bounds (including negative interference), automatic panel scaling, decimal point/comma browser input, and backward-compatible `.set` files.
+- Ordinary and group-resolved images use a unified C/Gnuplot renderer; both modes use the same signed gamma-weighted transverse observation operator. Group strengths, signed interference and invariant CSV exports remain available.
+
+See the [v1.2.0 release notes](docs/release-notes-v1.2.md), the [web tutorial](https://nmrspec.org/tutorial), and the [version history](https://nmrspec.org/changes).
+
+## Group-resolved spin spectra (introduced in v1.1, retained in v1.2)
 
 SpinSpec v1.1 introduces an optional gamma-weighted observation operator,
 a decomposition into **up to ten user-defined spin groups** and a **signed
@@ -62,7 +72,7 @@ The final command runs the example directly from the terminal. Look in the `bin/
 
 ## Physical model
 
-For `N` spin-1/2 nuclei, the complete product-basis Hamiltonian has dimension `2^N × 2^N` and includes Zeeman terms (with chemical shifts) and isotropic scalar `J` couplings. The engine diagonalizes the real symmetric matrix using GSL.
+For `N` spin-1/2 nuclei, the complete product-basis Hamiltonian has dimension `2^N × 2^N` and includes Zeeman terms (with chemical shifts) and isotropic scalar `J` couplings. Its total longitudinal spin projection `M_z = sum_k I_kz` is conserved. The current C engine first constructs the full real symmetric Hamiltonian, groups basis states into `M_z` sectors, checks that couplings between sectors vanish within numerical tolerance, and diagonalizes each sector independently using GSL. Eigenvectors are then assembled in the original product basis. This is an exact block decomposition for the implemented Hamiltonian, **not** an approximation that discards inter-spin couplings.
 
 The transition frequencies are the absolute differences of eigenvalues expressed in Hz:
 
@@ -70,7 +80,7 @@ The transition frequencies are the absolute differences of eigenvalues expressed
 frequency(i,j) = abs(E[j] - E[i])
 ```
 
-Transition strengths are calculated from matrix elements of a single-spin-flip operator, transformed into the Hamiltonian eigenbasis. **Both ordinary and group-resolved modes weight the transverse observation operator by the signed gyromagnetic ratios** (`O = sum_k (gamma_k/gamma_H) I_kx`). The grouped mode additionally reports the group-specific and coherent cross contributions. Older equal-weight strengths are not the default after this v1.1.0 correction. initial-state populations, receiver response and pulse-sequence dynamics are not modeled. Consequently, reported amplitudes should not be interpreted as calibrated experimental signal intensities. In particular, the current equal-weight detection model does not provide a general physically complete zero-field J-spectrum for heteronuclear systems.
+Transition strengths are calculated from matrix elements of a single-spin-flip operator, transformed into the Hamiltonian eigenbasis. **Both ordinary and group-resolved modes weight the transverse observation operator by the signed gyromagnetic ratios** (`O = sum_k (gamma_k/gamma_H) I_kx`). The grouped mode additionally reports the group-specific and coherent cross contributions. Older equal-weight strengths are not the default after the v1.1.0 correction. Initial-state populations, preparation, relaxation, receiver response and pulse-sequence dynamics are not modeled. Consequently, reported strengths are relative squared operator matrix elements, **not** calibrated experimental signal amplitudes. In particular, the observation model alone is not a complete experimental zero-field signal model for heteronuclear systems.
 
 The engine sums Lorentzian profiles for visualization. Each chosen graph window uses a reference Larmor frequency for its selected spin; **these windows are not isotope-selective component spectra**.
 
@@ -98,7 +108,7 @@ gcc -O2 -fopenmp engine_matrix.c -o engine_matrix -lgsl -lgslcblas -lm
 gcc -O2 matrix_graph.c GnuGraph.c -o matrix_graph -lm
 ```
 
-The C calculation invokes `./matrix_graph` for each field/frame, so **both executables must be available in the working directory**. The original source also contains an SVG-generation declaration, but SVG output is not needed for the commands above.
+The C calculation invokes `./matrix_graph` for the ordinary result. Keep **both executables** in the working directory. For invariant group plotting and cached replotting, also build `group_graph` and `replot_spectrum` as described in the [release notes](docs/release-notes-v1.2.md). The original source also contains an SVG-generation declaration, but SVG output is not needed for the commands above.
 
 ## Quick start
 
@@ -146,9 +156,9 @@ The records are:
 | `0 1 11` | Isotropic coupling `spin_i spin_j J_ij`; **zero-based** spin indices | Hz |
 | `Graph 0 1` | Zero-based indices selecting frequency display windows | — |
 | `1.2 1.2` | Vertical amplitude limits for those windows | relative units |
-| `0.1 16` | Lorentzian FWHM and frequency-window half-width | Hz |
+| `0.1 16` | Legacy Lorentzian FWHM and frequency-window half-width; a zero half-width selects automatic scaling | Hz |
 
-Additional couplings may be listed on separate lines before `Graph`. Use spin pairs in ascending index order (`i < j`), matching the current Hamiltonian implementation.
+Additional couplings may be listed on separate lines before `Graph`. Use spin pairs in ascending index order (`i < j`), matching the current Hamiltonian implementation. The modern web form has **no separate Graph heights or spectrum half-width input**: one FWHM field and optional independent X/Y boundaries replace those controls. It writes backward-compatible legacy records (`0` for automatic panel heights, and `FWHM 0` for automatic half-width) plus optional `XRange left right` and `YRange lower upper` records; `auto` means an unspecified bound. In the browser, either decimal dots or decimal commas are accepted if list items are separated by spaces; saved `.set` files use decimal dots. Observer-group assignments are configured in the web interface and are **not saved** in `.set` files.
 
 For a **linear magnetic-field sweep**, the field record may contain three numbers: `B_start B_stop B_step`, all in **mT**; the current GitHub version does not implement logarithmic sweeps.
 
@@ -160,9 +170,7 @@ The `app/`, `static/` and `templates/` directories contain a FastAPI application
 
 ## Tests and development status
 
-The repository includes a GitHub Actions smoke-test workflow that builds the C executables and runs two-spin and four-spin example calculations on pushes and pull requests. The original numerical regression verification was performed before the first public snapshot; the current public workflow checks that example outputs are generated, not that every numerical value matches a historical baseline.
-
-The opt-in v1.1 group mode offers spin-group decomposition with coherent interference and gamma weighting. See the new documentation for limitations and the distinction between numerical strengths and experimental amplitudes.
+The repository includes GitHub Actions checks for compilation, analytical and invariant-observer tests, numerical regression comparisons (including multispin models), unified plotting, cached replot parity and example spectra. The reference and invariance tests compare numerical quantities rather than merely checking that output files exist. See [release notes for v1.2.0](docs/release-notes-v1.2.md) for benchmark scope and validated precision. The opt-in group mode offers coherent group strengths and signed interference with gamma weighting; these are not calibrated experimental amplitudes.
 
 ## License and attribution
 
