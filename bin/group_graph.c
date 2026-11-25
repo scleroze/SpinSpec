@@ -499,7 +499,11 @@ int main(int argc,char **argv) {
     fprintf(gp,"set origin 0,0.86\nset size 1,0.12\n");
     fprintf(gp,"unset ytics\nset border 1\nunset grid\n");
     fprintf(gp,"set lmargin 10\nset rmargin 4\n");
-    fprintf(gp,"set title 'Transition positions (schematic)'\n");
+    /* The multiplot already has the SpinSpec figure title. A second
+     * title for this narrow overview panel was rendered in the same
+     * top margin, visibly overlapping it. Keep one figure heading;
+     * the overview is identified by its absolute-frequency axis. */
+    fprintf(gp,"unset title\n");
     fprintf(gp,"set xlabel 'Absolute frequency (Hz)'\n");
     fprintf(gp,"unset ylabel\n");
     double left=(xmin==0.0)?-fmax(1.,4.*fwhm):xmin;
