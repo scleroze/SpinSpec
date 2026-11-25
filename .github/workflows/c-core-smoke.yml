@@ -27,6 +27,13 @@ jobs:
           cd bin
           gcc -O2 -fopenmp engine_matrix.c -o engine_matrix -lgsl -lgslcblas -lm
           gcc -O2 matrix_graph.c GnuGraph.c -o matrix_graph -lm
+          gcc -std=c11 -O2 -Wall -Wextra replot_spectrum.c -o replot_spectrum -lm
+
+      - name: Check display-only replot agrees with original engine
+        run: |
+          set -euo pipefail
+          OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python3 tests/test_replot.py
+          python3 -m py_compile app/app.py
 
       - name: Run two-spin and phosphate examples
         shell: bash
