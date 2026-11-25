@@ -530,11 +530,14 @@
         <details class="advanced-spectrum-settings" id="advancedSpectrumSettings">
           <summary>Advanced spectrum settings (linewidth and plot axes)</summary>
           <div class="field">
-            <label for="linewidths">Line width (FWHM) and spectrum half-width (Hz; 0 = auto)</label>
-            <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
+            <label for="lineWidth">Line width (FWHM, Hz)</label>
+            <input id="lineWidth" name="lineWidth" type="number" min="0" step="any"
+                   value="0.5" placeholder="For example: 0.5" />
+            <div class="hint">Positive line width. The frequency window is
+              automatic unless you enter X boundaries below.</div>
           </div>
           <div class="field">
-            <label>Spectrum X boundaries (frequency offset, Hz)</label>
+            <label>Spectrum X boundaries (frequency offset, Hz; optional)</label>
             <div style="display:flex;gap:8px">
               <input id="xLeft" name="xLeft" type="number" step="any"
                      placeholder="Left (auto)" aria-label="Left frequency boundary" />
@@ -545,6 +548,9 @@
               <input id="rightSideOnly" type="checkbox" />
               Show right side only (left = 0 Hz)
             </label>
+            <div class="hint">Leave both limits empty for automatic scaling
+              (legacy spectrum half-width = 0). Enter either boundary
+              to override just that side.</div>
           </div>
           <div class="field">
             <label for="heights">Graph heights (legacy upper limits, 0 = auto)</label>
@@ -591,10 +597,10 @@
           </div>
           <div class="hint">
             A separate Gnuplot image shows total, group contributions and signed
-            interference. Enter 0 as the spectrum half-width to fit each
-            displayed frequency window automatically; positive values keep
-            the exact manual half-width. Zero-frequency terms remain in the
-            CSV. Intensities are relative, not experimentally calibrated.
+            interference. Spectrum windows are fitted automatically unless
+            you enter explicit X boundaries under Advanced spectrum settings.
+            Zero-frequency terms remain in the CSV. Intensities are relative,
+            not experimentally calibrated.
           </div>
         </div>
 
@@ -781,8 +787,7 @@
 
       interactiveButton.style.display = "inline-block";
       interactiveButton.onclick = () => {
-        const linewidths = document.getElementById("linewidths").value.trim();
-        const lineWidth = linewidths.split(/\s+/)[0] || "0.05";
+        const lineWidth = document.getElementById("lineWidth").value.trim() || "0.5";
 
         window.open(
           `/dev-spectrum?job=${result.job_id}&linewidth=${encodeURIComponent(lineWidth)}`,
@@ -847,6 +852,15 @@
       el.style.color = isError ? "red" : "black";
     }
 
+    function getLinewidthsForEngine() {
+      const fwhm = document.getElementById('lineWidth').value.trim();
+      if (!fwhm || !Number.isFinite(Number(fwhm)) || Number(fwhm) <= 0)
+        throw new Error('Line width (FWHM) must be a positive number in Hz.');
+      // The legacy engine still expects two values. A zero half-width
+      // selects automatic scaling; independent X limits now control zoom.
+      return `${fwhm} 0`;
+    }
+
     function getFormData() {
       return {
         title: document.getElementById('title').value.trim(),
@@ -856,7 +870,7 @@
         jcouplings: document.getElementById('jcouplings').value.replace(/\r/g, '').trim(),
         graph: document.getElementById('graph').value.trim(),
         heights: document.getElementById('heights').value.trim(),
-        linewidths: document.getElementById('linewidths').value.trim(),
+        linewidths: getLinewidthsForEngine(),
         x_left: document.getElementById('xLeft').value.trim(),
         x_right: document.getElementById('xRight').value.trim(),
         y_min: document.getElementById('yMin').value.trim(),
@@ -902,6 +916,39 @@
       return String(field_mT);
     }
 
+    // Convert the legacy `FWHM half-width` record to the new form.
+    // A fixed old half-width becomes explicit left/right limits so opening
+    // an old .set does not change the selected spectral window.
+    function decodeSetDisplayWidth(widthLine, xRangeLine = '') {
+      const tokens = widthLine.trim().split(/\s+/);
+      if (tokens.length < 1 || tokens.length > 2 ||
+          !Number.isFinite(Number(tokens[0])) || Number(tokens[0]) <= 0)
+        throw new Error('Invalid .set line width (FWHM).');
+      const half = tokens.length === 2 ? Number(tokens[1]) : 0;
+      if (!Number.isFinite(half) || half < 0)
+        throw new Error('Invalid .set spectrum half-width.');
+      const xMatch = xRangeLine
+        ? /^XRange\s+(\S+)\s+(\S+)$/.exec(xRangeLine.trim())
+        : null;
+      if (xRangeLine && !xMatch)
+        throw new Error('Invalid .set XRange record.');
+      const parseBoundary = (token, fallback) => {
+        if (!token || token.toLowerCase() === 'auto') return fallback;
+        if (!Number.isFinite(Number(token)))
+          throw new Error('Invalid .set X boundary.');
+        return token;
+      };
+      const left = parseBoundary(
+        xMatch ? xMatch[1] : '', half > 0 ? String(-half) : ''
+      );
+      const right = parseBoundary(
+        xMatch ? xMatch[2] : '', half > 0 ? String(half) : ''
+      );
+      if (left && right && Number(left) >= Number(right))
+        throw new Error('Invalid .set XRange: left must be less than right.');
+      return { fwhm: tokens[0], left, right };
+    }
+
     function fillFormFromSet(content) {
       const lines = content.replace(/\r/g, '').split('\n');
 
@@ -930,13 +977,13 @@
       if (i < lines.length) {
         document.getElementById('graph').value = (lines[i] || '').replace(/^Graph\s+/, '');
         document.getElementById('heights').value = lines[i + 1] ?? '';
-        document.getElementById('linewidths').value = lines[i + 2] ?? '';
-        const tail = (lines[i + 3] || '').trim();
-        const match = /^XRange\s+(\S+)\s+(\S+)$/.exec(tail);
-        document.getElementById('xLeft').value =
-          match && match[1] !== 'auto' ? match[1] : '';
-        document.getElementById('xRight').value =
-          match && match[2] !== 'auto' ? match[2] : '';
+        const xLine = lines.slice(i + 3)
+          .map(line => line.trim())
+          .find(line => /^XRange\s+/.test(line)) || '';
+        const display = decodeSetDisplayWidth(lines[i + 2] || '', xLine);
+        document.getElementById('lineWidth').value = display.fwhm;
+        document.getElementById('xLeft').value = display.left;
+        document.getElementById('xRight').value = display.right;
         document.getElementById('rightSideOnly').checked =
           document.getElementById('xLeft').value === '0';
         const yLine = lines.slice(i + 3).find(x => /^YRange\s+/.test(x.trim())) || '';
