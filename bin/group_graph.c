@@ -9,7 +9,7 @@
  * The original calculation and CSV fields are never changed.
  * All spectra are relative transition strengths, NOT FID amplitudes.
  *
- * Usage: ./group_graph 0 0.2
+ * Usage: ./group_graph 0 0.2 [spectrum_half_width_hz]
  */
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
@@ -85,18 +85,15 @@ typedef struct {
 } GroupWindow;
 
 /*
- * Group panels use the second Graph-width value as a maximum half-range.
- * Invariant transition strengths (not the coarse sampled display curve)
+ * For a Graph spectrum half-width of zero, invariant transition strengths
  * determine a tighter window for each observed group and spin reference.
+ * A positive Graph spectrum half-width is always respected exactly.
  * The original Sp, Res and invariant CSV files are not modified.
  */
 static double auto_group_half_width(const Line *lines, size_t count,
                                     int group, double center,
                                     double allowed, double fwhm) {
-    const char *option = getenv("SPINSPEC_GROUP_AUTO_X");
-    if (option && strcmp(option, "0") == 0)
-        return allowed; /* opt-out for regression comparisons */
-    if (!lines || group < 0 || group >= MAX_GROUPS ||
+     if (!lines || group < 0 || group >= MAX_GROUPS ||
         !isfinite(center) || !isfinite(allowed) || allowed <= 0 ||
         !isfinite(fwhm) || fwhm <= 0)
         return allowed;
@@ -159,8 +156,8 @@ static void locate_reference(long frame,int group,int nspins,
 }
 
 int main(int argc,char **argv) {
-    if(argc<2||argc>3) {
-        fprintf(stderr,"usage: %s FRAME [FWHM_HZ]\n",argv[0]);
+    if(argc<2||argc>4) {
+        fprintf(stderr,"usage: %s FRAME [FWHM_HZ] [SPECTRUM_HALF_WIDTH_HZ]\n",argv[0]);
         return 2;
     }
     char *end=NULL;
@@ -172,6 +169,15 @@ int main(int argc,char **argv) {
         fprintf(stderr,"FWHM must be positive\n");
         return 2;
     }
+    /* 0 enables automatic per-group zoom, positive preserves manual width.
+     * Missing third argument retains the legacy manual-window behavior. */
+    double requested_width = argc > 3 ? strtod(argv[3], &end) : 1.0;
+    if ((argc > 3 && (!end || *end)) ||
+        !isfinite(requested_width) || requested_width < 0.0) {
+        fprintf(stderr, "Spectrum half-width must be nonnegative\n");
+        return 2;
+    }
+    const int auto_x = (requested_width == 0.0);
 
     char in[128],out[128],curve[128];
     snprintf(in,sizeof(in),"Sp_invariant_%05ld.csv",frame);
@@ -292,9 +298,10 @@ int main(int argc,char **argv) {
         if(largest<=1e-14)continue;
         windows[g].occupied=1;
         locate_reference(frame,g,nspins,member_ids,&windows[g]);
-        windows[g].half_width = auto_group_half_width(
-            lines, count, g, windows[g].center,
-            windows[g].half_width, fwhm);
+        if (auto_x)
+            windows[g].half_width = auto_group_half_width(
+                lines, count, g, windows[g].center,
+                windows[g].half_width, fwhm);
         plotted_groups++;
     }
     if(plotted_groups<1){
@@ -366,11 +373,12 @@ int main(int argc,char **argv) {
         }
         DisplayPanel *p=&panels[panel_count++];
         p->spin=spin;p->group=g;p->center=center;
-        p->half_width = auto_group_half_width(
-            lines, count, g, center, fabs(offset), fwhm);
+        p->half_width = auto_x
+            ? auto_group_half_width(lines, count, g, center, fabs(offset), fwhm)
+            : fabs(offset);
         fprintf(stderr,
-                "GROUP X-RANGE group=%d spin=%d requested=%.6g selected=%.6g Hz\n",
-                g, spin, fabs(offset), p->half_width);
+                "GROUP X-RANGE group=%d spin=%d mode=%s requested=%.6g selected=%.6g Hz\n",
+                g, spin, auto_x ? "auto" : "manual", fabs(offset), p->half_width);
         if(windows[g].occupied && windows[g].representative_spin==spin &&
            fabs(p->center-windows[g].center)<1e-7 &&
            fabs(p->half_width-windows[g].half_width)<1e-7){
