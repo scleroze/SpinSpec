@@ -193,6 +193,31 @@
     .status.error {
       color: var(--danger);
     }
+    .advanced-spectrum-settings {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      margin: 5px 0 13px;
+    }
+    .advanced-spectrum-settings summary {
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .advanced-spectrum-settings .field { margin-top: 10px; }
+    .preview-alert {
+      display: none;
+      margin: 12px 12px 8px;
+      padding: 12px 14px;
+      border: 1px solid #fca5a5;
+      border-radius: 9px;
+      background: #fff1f2;
+      color: #991b1b;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    .preview-alert.visible { display: block; }
 
     .status.ok {
       color: #166534;
@@ -497,32 +522,41 @@
           <input id="graph" name="graph" type="text" placeholder="For example: 0 3 5" />
         </div>
 
-        <div class="field">
-          <label for="heights">Graph heights</label>
-          <input id="heights" name="heights" type="text" placeholder="For example: 1.0" />
-        </div>
-
-        <div class="field">
-          <label for="linewidths">Line width (FWHM) and spectrum half-width (Hz; 0 = auto)</label>
-          <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
-        </div>
-
-        <div class="field">
-          <label>Spectrum X boundaries (offset Hz; optional)</label>
-          <div style="display:flex;gap:8px">
-            <input id="xLeft" name="xLeft" type="number" step="any"
-                   placeholder="Left (auto)" aria-label="Left frequency boundary" />
-            <input id="xRight" name="xRight" type="number" step="any"
-                   placeholder="Right (auto)" aria-label="Right frequency boundary" />
+        <details class="advanced-spectrum-settings" id="advancedSpectrumSettings">
+          <summary>Advanced spectrum settings (linewidth and plot axes)</summary>
+          <div class="field">
+            <label for="linewidths">Line width (FWHM) and spectrum half-width (Hz; 0 = auto)</label>
+            <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
           </div>
-          <label class="check-row">
-            <input id="rightSideOnly" type="checkbox" />
-            Show right side only (left = 0 Hz)
-          </label>
-          <div class="hint">Empty boundaries are automatic. In zero field the
-            automatic left boundary is 0 Hz; positive spectrum half-widths
-            keep their fixed scale unless a boundary is explicitly set.</div>
-        </div>
+          <div class="field">
+            <label>Spectrum X boundaries (frequency offset, Hz)</label>
+            <div style="display:flex;gap:8px">
+              <input id="xLeft" name="xLeft" type="number" step="any"
+                     placeholder="Left (auto)" aria-label="Left frequency boundary" />
+              <input id="xRight" name="xRight" type="number" step="any"
+                     placeholder="Right (auto)" aria-label="Right frequency boundary" />
+            </div>
+            <label class="check-row">
+              <input id="rightSideOnly" type="checkbox" />
+              Show right side only (left = 0 Hz)
+            </label>
+          </div>
+          <div class="field">
+            <label for="heights">Graph heights (legacy upper limits, 0 = auto)</label>
+            <input id="heights" name="heights" type="text" placeholder="For example: 0 0 0" />
+          </div>
+          <div class="field">
+            <label>Independent Y limits (relative intensity)</label>
+            <div style="display:flex;gap:8px">
+              <input id="yMin" name="yMin" type="text" placeholder="Lower: auto or -0.5 -1"
+                     aria-label="Lower intensity bounds" />
+              <input id="yMax" name="yMax" type="text" placeholder="Upper: auto or 0.1 2"
+                     aria-label="Upper intensity bounds" />
+            </div>
+            <div class="hint">One value applies to all displayed panels; multiple values follow the
+              displayed-spin order. Leave blank for automatic scaling. Negative Y is allowed.</div>
+          </div>
+        </details>
 
         <div class="field" id="spinGroupField">
           <label>Group-resolved spectrum (optional)</label>
@@ -599,6 +633,7 @@
    
 
 <div class="preview-box">
+  <div id="previewAlert" class="preview-alert" role="alert" aria-live="assertive"></div>
   <div id="resultMessage" class="result-message"></div>
 
   <div class="preview-toolbar">
@@ -785,6 +820,20 @@
     function setStatus(message, type = '') {
       statusEl.textContent = message;
       statusEl.className = `status ${type}`.trim();
+      const alert = document.getElementById('previewAlert');
+      if (type === 'error') {
+        // Errors appear where users expect the spectrum, not only below the form.
+        const rateLimited = /HTTP 429/.test(message);
+        alert.textContent = rateLimited
+          ? 'Too many requests. Please wait a few seconds before calculating again.'
+          : message.replace(/^Error (calculating spectrum|loading example): /, '');
+        alert.classList.add('visible');
+        const panel = document.querySelector('.right-panel');
+        if (panel) panel.scrollTo({top: 0, behavior: 'smooth'});
+      } else {
+        alert.textContent = '';
+        alert.classList.remove('visible');
+      }
     }
 
     function showMessage(text, isError = false) {
@@ -805,6 +854,8 @@
         linewidths: document.getElementById('linewidths').value.trim(),
         x_left: document.getElementById('xLeft').value.trim(),
         x_right: document.getElementById('xRight').value.trim(),
+        y_min: document.getElementById('yMin').value.trim(),
+        y_max: document.getElementById('yMax').value.trim(),
         observer_groups: getSelectedObserverGroups(),
       };
     }
@@ -825,6 +876,9 @@
         data.linewidths,
         ...(data.x_left || data.x_right
             ? [`XRange ${data.x_left || 'auto'} ${data.x_right || 'auto'}`]
+            : []),
+        ...(data.y_min || data.y_max
+            ? [`YRange ${(data.y_min || 'auto').replace(/\s+/g, ',')} ${(data.y_max || 'auto').replace(/\s+/g, ',')}`]
             : []),
         ''
       ].join('\n');
@@ -880,6 +934,12 @@
           match && match[2] !== 'auto' ? match[2] : '';
         document.getElementById('rightSideOnly').checked =
           document.getElementById('xLeft').value === '0';
+        const yLine = lines.slice(i + 3).find(x => /^YRange\s+/.test(x.trim())) || '';
+        const yMatch = /^YRange\s+(\S+)\s+(\S+)$/.exec(yLine.trim());
+        document.getElementById('yMin').value = yMatch && yMatch[1] !== 'auto'
+          ? yMatch[1].replace(/,/g, ' ') : '';
+        document.getElementById('yMax').value = yMatch && yMatch[2] !== 'auto'
+          ? yMatch[2].replace(/,/g, ' ') : '';
       }
       proposeSpinGroups();
     }
