@@ -78,7 +78,7 @@
       </div>
       <div class="field">
         <b>Line width and spectrum width (Hz)</b>
-        <p>Two values in Hz: Lorentzian full width at half maximum (FWHM), followed by the half-width of the ordinary display window. In group mode the second value sets the maximum half-width, with automatic tighter group-specific zoom.</p>
+        <p>Two values in Hz: Lorentzian full width at half maximum (FWHM), followed by the half-width of the ordinary display window. Set the second value to <code>0</code> for automatic horizontal scale (including independently fitted group panels); any positive value is an exact manual half-width.</p>
       </div>
     </div>
   </section>
@@ -184,7 +184,7 @@
       <thead><tr><th>Value</th><th>Meaning</th><th>Example</th></tr></thead>
       <tbody>
         <tr><td>Line width</td><td>Lorentzian full width at half maximum (FWHM), used for display broadening only.</td><td><code>0.5</code></td></tr>
-        <tr><td>Spectrum width</td><td>Half-width around the reference resonance; in grouped plots this is the upper bound for automatic panel zoom.</td><td><code>100</code></td></tr>
+        <tr><td>Spectrum width</td><td>Half-width in Hz: <code>0</code> selects automatic X scaling; any positive number uses that exact half-width in ordinary and grouped plots.</td><td><code>0</code> (auto) or <code>100</code> (manual)</td></tr>
       </tbody>
     </table>
     <figure>
@@ -233,14 +233,14 @@
         <tr><td><b>External field</b> and <b>enter as ¹H frequency (MHz)</b></td><td>Normally enter B in mT. With the checkbox selected, enter the nominal proton Larmor frequency in MHz; the browser converts it to B using <code>gamma_H = 42.57747892 MHz/T</code>. The calculation and saved <code>.set</code> file use mT.</td></tr>
         <tr><td><b>Displayed spin numbers</b></td><td>Zero-based indices select local reference windows, not which spins enter the Hamiltonian. In group mode the application chooses one representative spin per nonempty group for its automatic plot layout.</td></tr>
         <tr><td><b>Graph heights</b></td><td>Enter one value per displayed spin; <code>0</code> means automatic vertical scale. A positive value sets the upper Y-axis limit, which can clip strong peaks. In grouped spectra the negative extent is still automatic to retain interference.</td></tr>
-        <tr><td><b>Line width and spectrum width (Hz)</b></td><td>For example <code>1 220</code>: FWHM is 1 Hz and the nominal half-window is 220 Hz. Ordinary plots use the specified half-window. Group panels automatically narrow to include significant transition strengths plus a margin, never exceeding that width. The numerical transitions and CSV remain unchanged.</td></tr>
+        <tr><td><b>Line width and spectrum width (Hz)</b></td><td>For example <code>1 220</code> means FWHM 1 Hz and a fixed half-width ±220 Hz in ordinary and grouped plots. <code>1 0</code> means FWHM 1 Hz and automatic X scaling: the ordinary plot fits significant nearby transitions; each group panel fits its group transitions with a safety margin. The numerical transitions and CSV remain unchanged.</td></tr>
         <tr><td><b>Advanced: edit group IDs</b></td><td>Provide exactly one group ID per spin (0–9), e.g. <code>0 0 0 1 1 2</code>. Manual assignments are preserved while editing until <b>Auto-detect groups</b> is selected.</td></tr>
         <tr><td><b>Save set / Open set</b></td><td>Save or restore Hamiltonian and display parameters. Spin-group assignments are a separate web setting and <b>are not stored</b> in the current <code>.set</code> format; after reloading, review the proposed groups.</td></tr>
         <tr><td><b>Interactive mode</b></td><td>Open the computed spectrum in a new tab. Its navigation buttons labeled <b>Group 1</b>, etc., refer to <em>frequency clusters</em>, not to the spin-group IDs defined above.</td></tr>
       </tbody>
     </table>
     <div class="note">
-      Automatic horizontal scaling affects <b>only the displayed group image</b>. It is not a selection rule for computed transitions, and weaker peaks may fall below the display-only significance threshold. Increase the spectral window or inspect the invariant CSV to review the full calculation.
+      Automatic horizontal scaling (second width value <code>0</code>) affects ordinary and grouped <b>display windows only</b>. It is not a selection rule for computed transitions. Because insignificant or distant lines may be outside the automatic window, use a positive manual width or the exported CSV to inspect the full calculated transitions.
     </div>
   </section>
 
