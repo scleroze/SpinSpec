@@ -1253,7 +1253,12 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
 
     char command[256];
           sprintf(command, "./matrix_graph %s %d", Mfile, Bc); // invoke the graphing helper for this field step
-          system(command);
+          int matrix_plot_status = system(command);
+          if (matrix_plot_status != 0) {
+              fprintf(stderr, "matrix_graph failed (status=%d)\n",
+                      matrix_plot_status);
+              return EXIT_FAILURE;
+          }
           /* In optional group mode, render the invariant result through
              SpinSpec's native C/Gnuplot plotting path as a separate JPEG.
              Legacy data_*.jpg and Res_*.dat remain untouched. */
