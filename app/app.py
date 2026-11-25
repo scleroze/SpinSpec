@@ -802,9 +802,8 @@ def replot(payload: ReplotRequest, request: Request) -> JobResult:
         for name in required:
             shutil.copy2(source / name, job_dir / name)
         write_set_file(job_dir, payload)
-        make_graph_symlink(job_dir)
-        if payload.observer_groups:
-            make_group_graph_symlink(job_dir)
+        make_graph_symlink(job_dir)  # Legacy CLI compatibility.
+        make_group_graph_symlink(job_dir)
 
         # NaN in the helper config means automatic left/right limit.
         left = payload.x_left if payload.x_left else "nan"
@@ -822,26 +821,24 @@ def replot(payload: ReplotRequest, request: Request) -> JobResult:
         process = run_command([str(REPLOT_BIN), "plot_params.dat"], cwd=job_dir)
         if process.returncode:
             raise failed_process_response(process, "replot_spectrum")
-        process = run_command([str(GRAPH_BIN), "input.set", "0"], cwd=job_dir, env=env)
+        # The unified group_graph executable renders the ordinary JPEG and,
+        # when observer groups exist, adds the group+interference JPEG.
+        graph, group_heights = observer_group_graph_layout(payload)
+        spin_numbers = [int(v) for v in graph.split()]
+        heights_spec = ",".join(
+            f"{spin}:{height}" for spin, height in
+            zip(spin_numbers, group_heights.split())
+        )
+        env["SPINSPEC_MODEL_FILE"] = "input.set"
+        env["SPINSPEC_GRAPH_HEIGHTS"] = heights_spec
+        env["SPINSPEC_X_LEFT"] = left if left != "nan" else "auto"
+        env["SPINSPEC_X_RIGHT"] = right if right != "nan" else "auto"
+        process = run_command(
+            [str(GROUP_GRAPH_BIN), "0", f"{fwhm:.17g}", f"{width:.17g}"],
+            cwd=job_dir, env=env,
+        )
         if process.returncode:
-            raise failed_process_response(process, "matrix_graph")
-
-        if payload.observer_groups:
-            spin_numbers = [int(v) for v in graph.split()]
-            heights = observer_group_graph_layout(payload)[1].split()
-            heights_spec = ",".join(
-                f"{spin}:{height}" for spin, height in zip(spin_numbers, heights)
-            )
-            env = observer_environment(payload) or os.environ.copy()
-            env["SPINSPEC_GRAPH_HEIGHTS"] = heights_spec
-            env["SPINSPEC_X_LEFT"] = left if left != "nan" else "auto"
-            env["SPINSPEC_X_RIGHT"] = right if right != "nan" else "auto"
-            process = run_command(
-                [str(GROUP_GRAPH_BIN), "0", f"{fwhm:.17g}", f"{width:.17g}"],
-                cwd=job_dir, env=env,
-            )
-            if process.returncode:
-                raise failed_process_response(process, "group_graph")
+            raise failed_process_response(process, "unified_group_graph")
 
         response = build_response(job_dir, "Spectrum redrawn without diagonalization.")
         if not response.image_url or (payload.observer_groups and
