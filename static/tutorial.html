@@ -5,7 +5,8 @@
   <link rel="canonical" href="https://nmrspec.org/tutorial" />
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SpinSpec Web Tutorial</title>
+  <title>SpinSpec 1.2 Web Tutorial — NMR Spectrum Simulator</title>
+  <meta name="description" content="SpinSpec 1.2 user guide: automatic NMR calculation and replot, linewidth and independent X/Y limits, spin-group spectra, .set files and CSV exports.">
   <link rel="stylesheet" href="/static/about.css">
 </head>
 <body>
@@ -17,32 +18,31 @@
 <a href="/">Calculator</a><a href="/changes">Version history</a><a href="/about">About (EN)</a><a href="/ru">Описание (RU)</a><a href="/tr">Tanıtım (TR)</a>
 </nav></div></header>
 <div class="site-container">
-<div class="guide-header"><h1>SpinSpec Web Tutorial</h1>
-<p class="subtitle">Illustrated guide to spin-system parameters, calculations, group-resolved spectra and numerical data export.</p>
-<p style="font-size:14px;margin:12px 0 0"><a href="#spin-groups">Spin-group setup and physics</a> · <a href="#additional-settings">Advanced display settings</a> · <a href="#data-export">CSV columns and units</a></p></div>
+<div class="guide-header"><h1>SpinSpec 1.2 Web Tutorial</h1>
+<p class="subtitle">Guide to the current calculator: model input, automatic full calculation or replot, independent axis limits, group-resolved spectra and CSV export.</p>
+<p style="font-size:14px;margin:12px 0 0"><a href="#quick-start">Quick start</a> · <a href="#display-controls">Linewidth and axes</a> · <a href="#spin-groups">Spin groups</a> · <a href="#additional-settings">Input and file formats</a> · <a href="#data-export">CSV columns and units</a></p></div>
 </div>
 
 <main class="site-container guide-content">
   <section>
     <h2>1. What SpinSpec does</h2>
-    <p><b>SpinSpec</b> calculates NMR spectra from a spin Hamiltonian. The input describes a set of spin-1/2 nuclei, their gyromagnetic ratios, chemical shifts, external magnetic field, and scalar J-couplings. After calculation, the program builds spectra for selected observed spins.</p>
+    <p><b>SpinSpec</b> calculates NMR transition frequencies and relative strengths from a coupled spin-1/2 Hamiltonian, using gyromagnetic ratios, chemical shifts, magnetic field and isotropic J-couplings. It covers conventional fields, weak fields and zero field. The public web calculator supports systems of up to eight spin-1/2 nuclei.</p>
+    <p>The current page has a parameter form on the left and the spectrum preview on the right (stacked on small screens). <b>One Calculate spectrum button</b> automatically selects a full calculation or a faster redraw from saved transitions. Calculation errors and request-limit warnings appear over the preview.</p>
     <div class="note">
       The current input convention uses spin numbers starting from <b>0</b>. For example, in a six-spin system the spins are numbered <code>0 1 2 3 4 5</code>.
     </div>
   </section>
 
-  <section>
-    <h2>2. Starting from an example</h2>
-    <p>The easiest way to begin is to choose one of the prepared examples from the <b>Examples</b> list.</p>
-    <figure>
-      <img src="/static/1_1.png" alt="SpinSpec example selector">
-      <figcaption>Open the Examples drop-down list and select a predefined spin system.</figcaption>
-    </figure>
-    <p>After selection, SpinSpec fills the input fields automatically. You can then edit any parameter manually.</p>
-    <figure>
-      <img src="/static/1_2.png" alt="Loaded SpinSpec example">
-      <figcaption>Example loaded: title and parameter fields are filled.</figcaption>
-    </figure>
+  <section id="quick-start">
+    <h2>2. Quick start: examples and one calculation button</h2>
+    <ol>
+      <li>Open <a href="/">the calculator</a> and select a model from <b>Examples</b>. Examples are grouped by category; illustrative and reduced models are identified in the list.</li>
+      <li>Selecting an example <b>fills the form and starts its calculation automatically</b>. The ordinary spectrum appears in the right-hand preview.</li>
+      <li>Change a display setting, such as <b>Line width (FWHM, Hz)</b>, under <b>Advanced spectrum settings (linewidth and plot axes)</b>.</li>
+      <li>Press <b>Calculate spectrum</b>. The hint below the button indicates whether SpinSpec will redraw cached transitions or recalculate the Hamiltonian.</li>
+      <li>Optionally enable <b>Calculate contributions of spin groups</b> to display separate group strengths and signed interference.</li>
+    </ol>
+    <div class="note"><b>Two automatic paths:</b> changing only FWHM, X/Y boundaries or displayed windows preserves calculated transition data. Changing the field, γ values, shifts, J-couplings or group assignments requires a full calculation. Fast replot needs a previous compatible job in the same browser tab.</div>
   </section>
 
   <section>
@@ -74,7 +74,7 @@
       </div>
       <div class="field">
         <b>Vertical intensity scale</b>
-        <p>Automatic by default. Enter an optional lower or upper Y limit in Advanced spectrum settings to adjust the visible intensity range; negative interference remains visible when bounds are automatic.</p>
+        <p>Automatic by default. The old <b>Graph heights</b> input has been removed. Open <b>Advanced spectrum settings</b> to enter optional independent lower and upper Y limits; negative interference remains visible when the bounds are automatic.</p>
       </div>
       <div class="field">
         <b>Line width (FWHM, Hz)</b>
@@ -89,7 +89,7 @@
       <img src="/static/1_3.png" alt="Isotope gyromagnetic ratios">
       <figcaption>The isotope list can be used as a reference for common nuclei.</figcaption>
     </figure>
-    <p>When you click a gyromagnetic-ratio value in the isotope list, the value is automatically copied to the clipboard. You can then paste it into the required position in the <b>Gyromagnetic ratios</b> input field.</p>
+    <p>Click an isotope value in the expandable list to <b>insert it directly</b> into the <b>Gyromagnetic ratios (MHz/T)</b> field at the cursor position. No clipboard paste is needed.</p>
     <p>For example, a system with five protons and one phosphorus nucleus may be entered as:</p>
     <pre><code>42.578 42.578 42.578 42.578 42.578 17.24</code></pre>
   </section>
@@ -135,8 +135,9 @@
       <img src="/static/1_4.png" alt="Chemical shifts and field input">
       <figcaption>Example: five proton shifts and one phosphorus shift.</figcaption>
     </figure>
-    <p>The external field is entered in mT. For example:</p>
+    <p>Normally the external field is entered in mT. For example:</p>
     <pre><code>500</code></pre>
+    <p>Alternatively, check <b>enter as ¹H frequency (MHz)</b> and enter one nominal proton Larmor frequency. The browser converts it to mT before calculation and when saving a <code>.set</code> file.</p>
     <figure>
       <img src="/static/1_5.png" alt="External magnetic field">
       <figcaption>External field set to 500 mT.</figcaption>
@@ -158,23 +159,17 @@
       <img src="/static/1_6.png" alt="J-coupling input">
       <figcaption>J-coupling values are entered line by line.</figcaption>
     </figure>
-    <div class="note">
-      Only one direction is required. For example, write <code>0 5 0.9</code>; the program treats the coupling as symmetric.
-    </div>
+    <div class="note">Only one direction is required. For example, enter <code>0 5 0.9</code> or <code>0 5 0,9</code>; the coupling is symmetric. Separate the two spin indices and J value with spaces. Decimal commas are converted to dots before computation.</div>
   </section>
 
   <section>
-    <h2>8. Selecting displayed spectra</h2>
-    <p>Use <b>Displayed spin numbers</b> to choose which nuclei should be shown in the final plot.</p>
+    <h2>8. Choosing the displayed spectra</h2>
+    <p><b>Displayed spin numbers</b> is a space-separated list of zero-based indices, for example <code>0 3 5</code>. It determines the ordinary spectrum panels, <b>not</b> which spins enter the Hamiltonian.</p>
     <figure>
-      <img src="/static/1_7.png" alt="Displayed spin numbers">
-      <figcaption>Here the spectra for spins 0, 3, and 5 will be displayed.</figcaption>
+      <img src="/static/1_7.png" alt="Example Displayed spin numbers field">
+      <figcaption>Example: spins 0, 3 and 5. Independent plot boundaries are now configured under Advanced spectrum settings.</figcaption>
     </figure>
-    <p>The <b>Graph heights</b> field controls the vertical scale of each plotted spectrum. The order follows the displayed spin numbers. Enter <code>0 0 0</code> for three automatically scaled panels or specify positive values to set their upper intensity limits.</p>
-    <figure>
-      <img src="/static/1_8.png" alt="Graph heights">
-      <figcaption>Three graph-height values for three displayed spins.</figcaption>
-    </figure>
+    <p>Every panel initially uses automatic vertical scaling. There is <b>no Graph heights field</b> in version 1.2. Enter a Y minimum or maximum only when you need a particular range. In group-resolved mode, SpinSpec automatically selects a reference window for each nonempty observer group.</p>
   </section>
 
   <section>
