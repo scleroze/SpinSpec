@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
           OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python3 tests/test_replot.py
           python3 -m py_compile app/app.py
+          python3 tests/test_auto_replot_ui.py
 
       - name: Run two-spin and phosphate examples
         shell: bash
