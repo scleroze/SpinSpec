@@ -76,13 +76,16 @@ class SpectrumRequest(BaseModel):
     graph: str = ""
     heights: str = ""
     linewidths: str = ""
+    x_left: str = ""
+    x_right: str = ""
     observer_groups: str = ""
     example_name: str = ""
     example_modified: bool = False
 
     @field_validator(
         "title", "gammas", "shifts", "field",
-        "jcouplings", "graph", "heights", "linewidths", "observer_groups"
+        "jcouplings", "graph", "heights", "linewidths", "x_left", "x_right",
+        "observer_groups"
     )
     @classmethod
     def strip_text(cls, value: str) -> str:
@@ -267,6 +270,21 @@ def validate_payload(payload: SpectrumRequest) -> None:
     if not payload.linewidths:
         raise HTTPException(status_code=400, detail="The 'Graph widths' ield must not be empty.")
 
+    bounds = []
+    for value, label in ((payload.x_left, "left"), (payload.x_right, "right")):
+        if not value:
+            bounds.append(None)
+            continue
+        try:
+            parsed = float(value)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid {label} X boundary.")
+        if not math.isfinite(parsed):
+            raise HTTPException(status_code=400, detail=f"Invalid {label} X boundary.")
+        bounds.append(parsed)
+    if bounds[0] is not None and bounds[1] is not None and bounds[0] >= bounds[1]:
+        raise HTTPException(status_code=400, detail="Left X boundary must be less than right X boundary.")
+
     if payload.observer_groups:
         items = payload.observer_groups.replace(",", " ").split()
         if len(items) != spin_count or any(
@@ -333,20 +351,23 @@ def observer_group_graph_layout(payload: SpectrumRequest) -> tuple[str, str]:
 
 def build_set_content(payload: SpectrumRequest) -> str:
     group_graph, group_heights = observer_group_graph_layout(payload)
-    return "\n".join(
-        [
-            sanitize_title(payload.title),
-            normalize_spaces(payload.gammas),
-            normalize_spaces(payload.shifts),
-            normalize_spaces(payload.field),
-            normalize_jcouplings(payload.jcouplings),
-            "",
-            f"Graph {group_graph}",
-            group_heights,
-            payload.linewidths,
-            "",
-        ]
-    )
+    records = [
+        sanitize_title(payload.title),
+        normalize_spaces(payload.gammas),
+        normalize_spaces(payload.shifts),
+        normalize_spaces(payload.field),
+        normalize_jcouplings(payload.jcouplings),
+        "",
+        f"Graph {group_graph}",
+        group_heights,
+        payload.linewidths,
+    ]
+    # Optional extension after the legacy FWHM/half-width line.
+    # Empty bounds are automatic, supplied values are offset-Hz limits.
+    if payload.x_left or payload.x_right:
+        records.append(f"XRange {payload.x_left or 'auto'} {payload.x_right or 'auto'}")
+    records.append("")
+    return "\n".join(records)
 
 
 def create_job_dir() -> Path:
@@ -598,6 +619,8 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
             "nuclei": infer_nuclei_from_gammas(payload.gammas),
             "field_mT": payload.field,
             "linewidths": payload.linewidths,
+            "x_left": payload.x_left,
+            "x_right": payload.x_right,
             "observer_groups": payload.observer_groups,
             "job_id": job_dir.name,
         })

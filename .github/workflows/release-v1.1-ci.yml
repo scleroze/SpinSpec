@@ -35,12 +35,15 @@ jobs:
           /usr/bin/python3 ../tests/test_unified_observer.py
       - name: Gnuplot output and legacy mode checks
         run: |
-          cd bin
+          # Regression tests above write Res files to bin/. Use a clean
+          # working directory so stale panels cannot enter group_graph.
+          mkdir -p ci-plot-check
+          cd ci-plot-check
+          ln -s ../bin/engine_matrix engine_matrix
+          ln -s ../bin/matrix_graph matrix_graph
+          ln -s ../bin/group_graph group_graph
           cp "../examples/Trimethyl_phosphate (one brench).set" test_model.set
           sed -i '4c0' test_model.set
-          # Numerical regression tests in this job also run from bin/,
-          # so remove their previously generated group outputs first.
-          rm -f group_spectrum_00000.jpg group_curve_00000.dat Sp_invariant_00000.csv Sp_groups_00000.csv
           OMP_NUM_THREADS=1 ./engine_matrix test_model.set > legacy.log
           test -s data_00000.jpg
           test ! -e group_spectrum_00000.jpg
@@ -82,8 +85,8 @@ jobs:
         with:
           name: SpinSpec-v1.1-Gnuplot-verification
           path: |
-            bin/group_spectrum_00000.jpg
-            bin/data_00000.jpg
-            bin/Sp_invariant_00000.csv
-            bin/group_curve_00000.dat
+            ci-plot-check/group_spectrum_00000.jpg
+            ci-plot-check/data_00000.jpg
+            ci-plot-check/Sp_invariant_00000.csv
+            ci-plot-check/group_curve_00000.dat
           if-no-files-found: error
