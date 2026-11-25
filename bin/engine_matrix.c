@@ -28,6 +28,7 @@
 #include <spawn.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <unistd.h>  /* access(), X_OK */
 extern char **environ;
 #define MAX_LINE_LENGTH 1024
 #define MAX_WORD_LENGTH 256
