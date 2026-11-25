@@ -503,7 +503,7 @@
         </div>
 
         <div class="field">
-          <label for="linewidths">line width and spectrum width (Hz)</label>
+          <label for="linewidths">Line width (FWHM) and spectrum half-width (Hz; 0 = auto)</label>
           <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
         </div>
 
@@ -535,10 +535,10 @@
           </div>
           <div class="hint">
             A separate Gnuplot image shows total, group contributions and signed
-            interference. Frequency windows automatically zoom to significant
-            group transitions (the entered spectrum width remains the maximum).
-            Zero-frequency terms remain in the CSV. Intensities are relative,
-            not experimentally calibrated.
+            interference. Enter 0 as the spectrum half-width to fit each
+            displayed frequency window automatically; positive values keep
+            the exact manual half-width. Zero-frequency terms remain in the
+            CSV. Intensities are relative, not experimentally calibrated.
           </div>
         </div>
 
