@@ -1,4 +1,5 @@
 import json
+import re
 import csv
 import math
 import tempfile
@@ -32,6 +33,7 @@ EXAMPLES_DIR = BASE_DIR / "examples"
 ENGINE_BIN = BIN_DIR / "engine_matrix"
 GRAPH_BIN = BIN_DIR / "matrix_graph"
 GROUP_GRAPH_BIN = BIN_DIR / "group_graph"
+REPLOT_BIN = BIN_DIR / "replot_spectrum"
 INDEX_HTML = TEMPLATES_DIR / "index.html"
 LOGS_DIR = BASE_DIR / "logs"
 AUDIT_FILE = LOGS_DIR / "audit.jsonl"
@@ -48,6 +50,7 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 
 calc_lock = threading.Lock()
 request_times = defaultdict(lambda: deque())
+replot_request_times = defaultdict(lambda: deque())
 
 logging.basicConfig(
     level=logging.INFO,
@@ -78,6 +81,8 @@ class SpectrumRequest(BaseModel):
     linewidths: str = ""
     x_left: str = ""
     x_right: str = ""
+    y_min: str = ""
+    y_max: str = ""
     observer_groups: str = ""
     example_name: str = ""
     example_modified: bool = False
@@ -85,11 +90,15 @@ class SpectrumRequest(BaseModel):
     @field_validator(
         "title", "gammas", "shifts", "field",
         "jcouplings", "graph", "heights", "linewidths", "x_left", "x_right",
-        "observer_groups"
+        "y_min", "y_max", "observer_groups"
     )
     @classmethod
     def strip_text(cls, value: str) -> str:
         return value.replace("\r", "").strip()
+
+
+class ReplotRequest(SpectrumRequest):
+    source_job_id: str
 
 
 class JobResult(BaseModel):
@@ -285,6 +294,37 @@ def validate_payload(payload: SpectrumRequest) -> None:
     if bounds[0] is not None and bounds[1] is not None and bounds[0] >= bounds[1]:
         raise HTTPException(status_code=400, detail="Left X boundary must be less than right X boundary.")
 
+    # Independent intensity limits; one per displayed spin or one shared.
+    try:
+        axes = observer_group_graph_layout(payload)[0].split()
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid observer-group assignment.")
+    y_values = []
+    for field, name in ((payload.y_min, "lower"), (payload.y_max, "upper")):
+        values = field.replace(",", " ").split()
+        if len(values) not in (0, 1, len(axes)):
+            raise HTTPException(status_code=400,
+                                detail=f"Expected one or {len(axes)} {name} Y limits.")
+        normalized = values * len(axes) if len(values) == 1 else values
+        parsed = []
+        for token in normalized:
+            if token.lower() == "auto":
+                parsed.append(None)
+            else:
+                try:
+                    number = float(token)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid {name} Y limit.")
+                if not math.isfinite(number):
+                    raise HTTPException(status_code=400, detail=f"Invalid {name} Y limit.")
+                parsed.append(number)
+        y_values.append(parsed)
+    if y_values[0] and y_values[1]:
+        for lower, upper in zip(*y_values):
+            if lower is not None and upper is not None and lower >= upper:
+                raise HTTPException(status_code=400,
+                                    detail="Each lower Y boundary must be less than the upper Y boundary.")
+
     if payload.observer_groups:
         items = payload.observer_groups.replace(",", " ").split()
         if len(items) != spin_count or any(
@@ -366,8 +406,23 @@ def build_set_content(payload: SpectrumRequest) -> str:
     # Empty bounds are automatic, supplied values are offset-Hz limits.
     if payload.x_left or payload.x_right:
         records.append(f"XRange {payload.x_left or 'auto'} {payload.x_right or 'auto'}")
+    if payload.y_min or payload.y_max:
+        ymin = ','.join(payload.y_min.replace(',', ' ').split()) or 'auto'
+        ymax = ','.join(payload.y_max.replace(',', ' ').split()) or 'auto'
+        records.append(f"YRange {ymin} {ymax}")
     records.append("")
     return "\n".join(records)
+
+
+def physical_fingerprint(payload: SpectrumRequest) -> dict:
+    """Only changes to these inputs require new Hamiltonian/observer data."""
+    return {
+        "gammas": normalize_spaces(payload.gammas),
+        "shifts": normalize_spaces(payload.shifts),
+        "field": normalize_spaces(payload.field),
+        "jcouplings": normalize_jcouplings(payload.jcouplings),
+        "observer_groups": normalize_spaces(payload.observer_groups),
+    }
 
 
 def create_job_dir() -> Path:
@@ -408,15 +463,36 @@ def make_group_graph_symlink(job_dir: Path) -> None:
         link_path.symlink_to(GROUP_GRAPH_BIN)
 
 
-def observer_environment(payload: SpectrumRequest) -> Optional[dict]:
-    if not payload.observer_groups:
-        return None
+def plot_environment(payload: SpectrumRequest) -> dict:
+    """Display settings forwarded consistently to both C plotting paths."""
     env = os.environ.copy()
-    env["SPINSPEC_OBSERVER_GROUPS"] = ",".join(
-        payload.observer_groups.replace(",", " ").split()
-    )
-    env["OMP_NUM_THREADS"] = "1"
+    if payload.observer_groups:
+        env["SPINSPEC_OBSERVER_GROUPS"] = ",".join(
+            payload.observer_groups.replace(",", " ").split()
+        )
+        env["OMP_NUM_THREADS"] = "1"
+
+    graph, _ = observer_group_graph_layout(payload)
+    spins = [int(v) for v in graph.split()]
+    for field, env_name in (
+        (payload.y_min, "SPINSPEC_Y_MIN"),
+        (payload.y_max, "SPINSPEC_Y_MAX"),
+    ):
+        values = field.replace(",", " ").split()
+        if len(values) == 1:
+            values *= len(spins)
+        if values:
+            env[env_name] = ",".join(
+                f"{spin}:{value}" for spin, value in zip(spins, values)
+                if value.lower() != "auto"
+            )
+        else:
+            env.pop(env_name, None)
     return env
+
+
+def observer_environment(payload: SpectrumRequest) -> Optional[dict]:
+    return plot_environment(payload)
 
 
 # SPINSPEC_CSV_EXPORT_V1
@@ -525,16 +601,28 @@ def check_rate_limit(ip: str) -> None:
     if q and now - q[-1] < MIN_SECONDS_BETWEEN_REQUESTS:
         raise HTTPException(
             status_code=429,
-            detail=f"Слишком частые запросы. Подождите {MIN_SECONDS_BETWEEN_REQUESTS} секунд.",
+            detail=f"Requests are too frequent. Please wait {MIN_SECONDS_BETWEEN_REQUESTS} seconds before trying again.",
         )
 
     if len(q) >= MAX_REQUESTS_PER_MINUTE:
         raise HTTPException(
             status_code=429,
-            detail="Слишком много запросов за минуту. Попробуйте позже.",
+            detail="Too many calculations in one minute. Please try again later.",
         )
 
     q.append(now)
+
+def check_replot_rate_limit(ip: str) -> None:
+    # Plot-only requests should not inherit the 5-second delay from full
+    # diagonalizations, but still have a separate abuse-protection quota.
+    now = time.time()
+    recent = replot_request_times[ip]
+    while recent and now - recent[0] > 60:
+        recent.popleft()
+    if (recent and now - recent[-1] < 0.75) or len(recent) >= 30:
+        raise HTTPException(status_code=429, detail="Too many replot requests.")
+    recent.append(now)
+
 
 def geoip_lookup(ip: str) -> dict:
     if ip in GEOIP_CACHE:
@@ -595,9 +683,10 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
 
     try:
         set_path = write_set_file(job_dir, payload)
-        make_graph_symlink(job_dir)
-        if payload.observer_groups:
-            make_group_graph_symlink(job_dir)
+        make_graph_symlink(job_dir)  # Legacy CLI compatibility.
+        # The engine uses group_graph as the unified renderer whenever
+        # it is present, even when no observer groups were requested.
+        make_group_graph_symlink(job_dir)
 
         process = run_command([str(ENGINE_BIN), set_path.name], cwd=job_dir,
                               env=observer_environment(payload))
@@ -611,6 +700,12 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
             raise HTTPException(
                 status_code=500, detail="Group-resolved plot not generated."
             )
+        # Store trusted physical provenance after the expensive calculation
+        # succeeds, so subsequent display-only requests can use saved lines.
+        (job_dir / "physical.json").write_text(
+            json.dumps(physical_fingerprint(payload), ensure_ascii=False),
+            encoding="utf-8",
+        )
         audit_event("calculate", ip, {
             "spins": spin_count,
             "title": payload.title,
@@ -634,6 +729,135 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
         if job_dir.exists() and not any(job_dir.iterdir()):
             shutil.rmtree(job_dir, ignore_errors=True)
         raise
+    finally:
+        calc_lock.release()
+
+
+@app.post("/api/replot", response_model=JobResult)
+def replot(payload: ReplotRequest, request: Request) -> JobResult:
+    """Refresh display curves from saved transitions. Never invoke engine_matrix."""
+    ip = get_client_ip(request)
+    validate_payload(payload)
+    check_replot_rate_limit(ip)
+
+    if not re.fullmatch(r"[0-9a-f]{12}", payload.source_job_id):
+        raise HTTPException(status_code=400, detail="Invalid source job ID.")
+
+    source = JOBS_DIR / payload.source_job_id
+    provenance = source / "physical.json"
+    required = ["Sp_00000.dat", "Sp_dc_00000.dat",
+                "Sp_tolerance_00000.dat"]
+    if payload.observer_groups:
+        required.append("Sp_invariant_00000.csv")
+    if not provenance.is_file() or any(not (source / name).is_file()
+                                       for name in required):
+        raise HTTPException(
+            status_code=409,
+            detail="Reusable transition data are unavailable. Recalculate the model.",
+        )
+    try:
+        original_physics = json.loads(provenance.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise HTTPException(status_code=409, detail="Invalid saved calculation metadata.")
+    if original_physics != physical_fingerprint(payload):
+        raise HTTPException(
+            status_code=409,
+            detail="Physical parameters have changed. Full calculation required.",
+        )
+    # Only single-field jobs are currently supported by this display cache.
+    try:
+        gammas = [float(v) for v in normalize_spaces(payload.gammas).split()]
+        shifts = [float(v) for v in normalize_spaces(payload.shifts).split()]
+        field = float(payload.field)
+        fwhm, width = map(float, normalize_spaces(payload.linewidths).split())
+        graph, _ = observer_group_graph_layout(payload)
+        selected = [int(v) for v in graph.split()]
+        if not (len(gammas) == len(shifts) == infer_spin_count(payload) and
+                all(math.isfinite(v) for v in gammas + shifts) and
+                math.isfinite(field) and math.isfinite(fwhm) and fwhm > 0 and
+                math.isfinite(width) and width >= 0 and
+                selected and len(set(selected)) == len(selected) and
+                all(0 <= v < len(gammas) for v in selected)):
+            raise ValueError("Invalid display parameters.")
+        coupling_matrix = {}
+        for line in normalize_jcouplings(payload.jcouplings).splitlines():
+            a, b, j = line.split()
+            a, b, j = int(a), int(b), float(j)
+            if not math.isfinite(j) or not (0 <= a < len(gammas) and
+                                            0 <= b < len(gammas)):
+                raise ValueError("Invalid coupling.")
+            coupling_matrix[(a, b)] = j
+        total_abs_j = sum(abs(value) for (a, b), value
+                          in coupling_matrix.items() if a < b)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Malformed replot parameters.")
+
+    if not REPLOT_BIN.is_file():
+        raise HTTPException(status_code=503, detail="Replot helper unavailable.")
+    if not calc_lock.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="Calculation server busy.")
+
+    job_dir = None
+    try:
+        job_dir = create_job_dir()
+        for name in required:
+            shutil.copy2(source / name, job_dir / name)
+        write_set_file(job_dir, payload)
+        make_graph_symlink(job_dir)  # Legacy CLI compatibility.
+        make_group_graph_symlink(job_dir)
+
+        # NaN in the helper config means automatic left/right limit.
+        left = payload.x_left if payload.x_left else "nan"
+        right = payload.x_right if payload.x_right else "nan"
+        params = [
+            f"{len(gammas)} {len(selected)} {field:.17g} "
+            f"{fwhm:.17g} {width:.17g} {left} {right} {total_abs_j:.17g}"
+        ]
+        params.extend(f"{g:.17g} {sh:.17g}" for g, sh in zip(gammas, shifts))
+        params.extend(str(spin) for spin in selected)
+        (job_dir / "plot_params.dat").write_text(
+            "\n".join(params) + "\n", encoding="utf-8",
+        )
+        env = plot_environment(payload)
+        process = run_command([str(REPLOT_BIN), "plot_params.dat"], cwd=job_dir)
+        if process.returncode:
+            raise failed_process_response(process, "replot_spectrum")
+        # The unified group_graph executable renders the ordinary JPEG and,
+        # when observer groups exist, adds the group+interference JPEG.
+        graph, group_heights = observer_group_graph_layout(payload)
+        spin_numbers = [int(v) for v in graph.split()]
+        heights_spec = ",".join(
+            f"{spin}:{height}" for spin, height in
+            zip(spin_numbers, group_heights.split())
+        )
+        env["SPINSPEC_MODEL_FILE"] = "input.set"
+        env["SPINSPEC_GRAPH_HEIGHTS"] = heights_spec
+        env["SPINSPEC_X_LEFT"] = left if left != "nan" else "auto"
+        env["SPINSPEC_X_RIGHT"] = right if right != "nan" else "auto"
+        process = run_command(
+            [str(GROUP_GRAPH_BIN), "0", f"{fwhm:.17g}", f"{width:.17g}"],
+            cwd=job_dir, env=env,
+        )
+        if process.returncode:
+            raise failed_process_response(process, "unified_group_graph")
+
+        response = build_response(job_dir, "Spectrum redrawn without diagonalization.")
+        if not response.image_url or (payload.observer_groups and
+                                      not response.group_image_url):
+            raise HTTPException(status_code=500, detail="Replot image missing.")
+        (job_dir / "physical.json").write_text(
+            json.dumps(original_physics, ensure_ascii=False), encoding="utf-8",
+        )
+        audit_event("replot", ip, {
+            "source_job_id": payload.source_job_id,
+            "job_id": job_dir.name,
+            "linewidths": payload.linewidths,
+            "x_left": payload.x_left,
+            "x_right": payload.x_right,
+        })
+        return response
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Replot timeout exceeded.")
     finally:
         calc_lock.release()
 

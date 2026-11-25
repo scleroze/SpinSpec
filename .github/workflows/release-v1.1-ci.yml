@@ -20,6 +20,7 @@ jobs:
           gcc -O2 -fopenmp bin/engine_matrix.c -o bin/engine_matrix -lgsl -lgslcblas -lm
           gcc -O2 bin/matrix_graph.c bin/GnuGraph.c -o bin/matrix_graph -lm
           gcc -std=c11 -O2 -Wall -Wextra bin/group_graph.c -o bin/group_graph -lm
+          gcc -std=c11 -O2 -Wall -Wextra bin/replot_spectrum.c -o bin/replot_spectrum -lm
       - name: Analytical and invariance tests
         run: |
           gcc -std=c11 -O2 -Wall -Wextra tests/test_observer_groups.c -o tests/test_observer_groups -lm
@@ -33,6 +34,9 @@ jobs:
           /usr/bin/python3 ../tests/test_multispin_reference.py
           /usr/bin/python3 ../tests/test_invariant_reference.py
           /usr/bin/python3 ../tests/test_unified_observer.py
+      - name: Replot from saved transitions (no diagonalization)
+        run: |
+          OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 python3 tests/test_replot.py
       - name: Gnuplot output and legacy mode checks
         run: |
           # Regression tests above write Res files to bin/. Use a clean
@@ -66,7 +70,9 @@ jobs:
                          and float(r["total_strength"])>1e-6 for r in rows)
           with open("group_curve_00000.dat") as f:
               samples=[[float(v) for v in line.split()] for line in f]
-          # group_curve is sampled at MAX_POINTS=2400; only the local\n          # per-spin curves use LOCAL_POINTS=2401.\n          assert len(samples)==2400
+          # group_curve is sampled at MAX_POINTS=2400; only the local
+          # per-spin curves use LOCAL_POINTS=2401.
+          assert len(samples)==2400
           assert all(len(s)==5 and all(math.isfinite(v) for v in s) for s in samples)
           # Total = group0 + group1 + signed interference
           assert max(abs(s[1]-s[2]-s[3]-s[4]) for s in samples)<1e-6
