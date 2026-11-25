@@ -553,10 +553,6 @@
               to override just that side.</div>
           </div>
           <div class="field">
-            <label for="heights">Graph heights (legacy upper limits, 0 = auto)</label>
-            <input id="heights" name="heights" type="text" placeholder="For example: 0 0 0" />
-          </div>
-          <div class="field">
             <label>Independent Y limits (relative intensity)</label>
             <div style="display:flex;gap:8px">
               <input id="yMin" name="yMin" type="text" placeholder="Lower: auto or -0.5 -1"
@@ -852,6 +848,14 @@
       el.style.color = isError ? "red" : "black";
     }
 
+    function automaticGraphHeights() {
+      // Legacy .set requires one height per displayed spin. Graph height
+      // zero means automatic and is now implicit in the interface.
+      const selected = document.getElementById('graph').value.trim().split(/\s+/)
+        .filter(Boolean);
+      return selected.map(() => '0').join(' ');
+    }
+
     function getLinewidthsForEngine() {
       const fwhm = document.getElementById('lineWidth').value.trim();
       if (!fwhm || !Number.isFinite(Number(fwhm)) || Number(fwhm) <= 0)
@@ -869,7 +873,7 @@
         field: getFieldValueForCalculation(),
         jcouplings: document.getElementById('jcouplings').value.replace(/\r/g, '').trim(),
         graph: document.getElementById('graph').value.trim(),
-        heights: document.getElementById('heights').value.trim(),
+        heights: automaticGraphHeights(),
         linewidths: getLinewidthsForEngine(),
         x_left: document.getElementById('xLeft').value.trim(),
         x_right: document.getElementById('xRight').value.trim(),
@@ -976,7 +980,7 @@
 
       if (i < lines.length) {
         document.getElementById('graph').value = (lines[i] || '').replace(/^Graph\s+/, '');
-        document.getElementById('heights').value = lines[i + 1] ?? '';
+        const legacyHeights = (lines[i + 1] || '').trim().split(/\s+/).filter(Boolean);
         const xLine = lines.slice(i + 3)
           .map(line => line.trim())
           .find(line => /^XRange\s+/.test(line)) || '';
@@ -992,6 +996,12 @@
           ? yMatch[1].replace(/,/g, ' ') : '';
         document.getElementById('yMax').value = yMatch && yMatch[2] !== 'auto'
           ? yMatch[2].replace(/,/g, ' ') : '';
+        // Retain positive legacy Graph heights if no explicit Y maximum
+        // was provided. The UI now synthesizes auto heights (zeros).
+        if (!yMatch && legacyHeights.some(v => Number(v) > 0)) {
+          document.getElementById('yMax').value =
+            legacyHeights.map(v => Number(v) > 0 ? v : 'auto').join(' ');
+        }
       }
       proposeSpinGroups();
     }
