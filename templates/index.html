@@ -567,16 +567,12 @@
 
         <div class="button-row-bottom">
           <button type="button" class="primary" id="calculateBtn">Calculate spectrum</button>
-          <button type="button" class="secondary" id="replotBtn" disabled
-                  title="Use saved transitions to change linewidth and graph limits">
-            Replot only
-          </button>
           <button type="button" class="secondary" id="showInfoBtn">Info &amp; Feedback</button>
         </div>
-        <div class="hint">After a calculation, <b>Replot only</b> changes FWHM,
-          frequency bounds, displayed spins or graph heights using saved
-          transitions. Field, shifts, J-couplings and spin-group assignments
-          require Calculate spectrum.</div>
+        <div class="hint" id="calculationMode" role="status" aria-live="polite">
+          The first calculation evaluates the Hamiltonian. Subsequent
+          display-only changes reuse saved transitions automatically.
+        </div>
       </form>
 
       <div id="status" class="status">Form is ready.</div>
@@ -727,7 +723,7 @@
     const openSetInput = document.getElementById('openSetInput');
     const saveSetBtn = document.getElementById('saveSetBtn');
     const calculateBtn = document.getElementById('calculateBtn');
-    const replotBtn = document.getElementById('replotBtn');
+    const calculationModeEl = document.getElementById('calculationMode');
     const previewImage = document.getElementById('previewImage');
     const placeholder = document.getElementById('placeholder');
     const exampleSelect = document.getElementById('exampleSelect');
@@ -996,17 +992,48 @@
     function saveReusableResult(result, data) {
       cachedPhysics = physicalSignature(data);
       cachedJobId = result.job_id;
-      replotBtn.disabled = false;
+      updateCalculationMode();
     }
 
     function physicalStateIsUnchanged(data) {
       return !!cachedJobId && cachedPhysics === physicalSignature(data);
     }
 
+    function updateCalculationMode() {
+      if (!cachedJobId) {
+        calculationModeEl.textContent =
+          'First calculation: the Hamiltonian and transitions will be computed.';
+        return;
+      }
+      try {
+        const data = getFormData();
+        calculationModeEl.textContent = physicalStateIsUnchanged(data)
+          ? 'Physical model unchanged — only the spectrum will be redrawn. No diagonalization.'
+          : 'Physical model changed — the Hamiltonian and transitions will be recalculated.';
+      } catch (_) {
+        calculationModeEl.textContent =
+          'Check the model parameters before calculation.';
+      }
+    }
+
     async function redrawFromTransitions(data) {
       return sendRequest('/api/replot', {
         ...data, source_job_id: cachedJobId,
       });
+    }
+
+    // One user action; the system decides whether the expensive physical
+    // calculation is necessary. A missing/expired cache safely falls back
+    // to the original full calculation.
+    async function calculateOrReuse(data) {
+      if (physicalStateIsUnchanged(data)) {
+        try {
+          return await redrawFromTransitions(data);
+        } catch (error) {
+          if (!/HTTP 409(?:\\D|$)/.test(error.message)) throw error;
+        }
+      }
+      return sendRequest('/api/calculate', data);
     }
 
     const missingGroupText =
@@ -1123,7 +1150,7 @@
         setStatus(`Example ${data.filename} loaded. Starting calculation...`, '');
 
         const calculationData = getFormData();
-        const result = await sendRequest('/api/calculate', calculationData);
+        const result = await calculateOrReuse(calculationData);
         saveReusableResult(result, calculationData);
 
         if (result.image_url) {
@@ -1150,6 +1177,7 @@
       try {
         const text = await file.text();
         fillFormFromSet(text);
+        updateCalculationMode();
         currentFileName = file.name;
         metaEl.textContent = `Current file: ${currentFileName}`;
         setStatus(`File downloaded: ${file.name}.`, 'ok');
@@ -1171,37 +1199,16 @@
     }
 
     calculateBtn.addEventListener('click', async () => {
+      calculateBtn.disabled = true;
       try {
         const data = getFormData();
-        let result;
-        if (physicalStateIsUnchanged(data)) {
-          try {
-            result = await redrawFromTransitions(data);
-          } catch (error) {
-            // Cache may have expired or originate from an older job format.
-            // Recalculate only when the server explicitly rejects reuse.
-            if (!/HTTP 409|\"status_code\":409/.test(error.message)) throw error;
-            result = await sendRequest('/api/calculate', data);
-          }
-        } else {
-          result = await sendRequest('/api/calculate', data);
-        }
+        const result = await calculateOrReuse(data);
         await showCalculatedResult(result, data);
       } catch (error) {
         setStatus(`Error calculating spectrum: ${error.message}`, 'error');
-      }
-    });
-
-    replotBtn.addEventListener('click', async () => {
-      try {
-        const data = getFormData();
-        if (!physicalStateIsUnchanged(data)) {
-          throw new Error('Magnetic field, chemical shifts, couplings or spin groups changed. Use Calculate spectrum.');
-        }
-        const result = await redrawFromTransitions(data);
-        await showCalculatedResult(result, data);
-      } catch (error) {
-        setStatus(`Replot unavailable: ${error.message}`, 'error');
+      } finally {
+        calculateBtn.disabled = false;
+        updateCalculationMode();
       }
     });
     
@@ -1479,7 +1486,13 @@
         groupChangeTimer = setTimeout(proposeSpinGroups, 250);
       });
     });
+    // Update the prediction as soon as the user edits a field, loads a
+    // .set file or changes the group assignment. No calculation is started.
+    const form = document.getElementById('nmrForm');
+    form.addEventListener('input', updateCalculationMode);
+    form.addEventListener('change', updateCalculationMode);
     proposeSpinGroups();
+    updateCalculationMode();
 
     loadExamples();
   </script>
