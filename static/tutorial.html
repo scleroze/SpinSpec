@@ -192,14 +192,16 @@
       <figcaption>After checking the parameters, press Calculate spectrum.</figcaption>
     </figure>
     <p>Press <b>Save set</b> to store the current input, <b>Open set</b> to load an existing file, or <b>Calculate spectrum</b> to run the Hamiltonian calculation and generate the plotted spectra.</p>
-    <p>After the first calculation, <b>Replot only</b> reuses stored transition
-    frequencies, strengths and invariant DC contributions. You may change
-    FWHM, X bounds, graph heights or displayed spin windows without solving
-    the Hamiltonian again. The main <b>Calculate spectrum</b> button also
-    automatically reuses these data when only display parameters changed.
-    Changing the magnetic field, gyromagnetic ratios, chemical shifts,
-    J-couplings or observation groups requires a new full calculation.
-    Older saved jobs without the required metadata cannot be replotted.</p>
+    <p><b>Calculate spectrum</b> automatically chooses between full
+    Hamiltonian diagonalization and fast plotting from saved transition
+    frequencies, strengths and invariant DC contributions. Changing FWHM,
+    X bounds, graph heights or displayed spin windows needs only plotting;
+    changing magnetic field, gyromagnetic ratios, chemical shifts,
+    J-couplings or observer-group assignments triggers a full calculation.
+    This also applies after opening a modified <code>.set</code> file,
+    provided the previous calculation is available in the current browser
+    session. A hint beneath the button shows which path will run. Jobs from
+    older software versions without cache metadata are recalculated.</p>
   </section>
 
   <!-- SPINSPEC_GROUP_MODE_GUIDE_V12 -->
