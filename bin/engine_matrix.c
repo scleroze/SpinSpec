@@ -346,12 +346,56 @@ int main(int argc, char *argv[]) {
  * The Lorentzian half-width at half maximum is gamma = FWHM/2.
  */
 double fwhm_hz, WidthLine, WidthSpectrum;
+double x_left_override = NAN, x_right_override = NAN;
 if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
     !isfinite(fwhm_hz) || fwhm_hz <= 0.0 ||
     !isfinite(WidthSpectrum) || WidthSpectrum < 0.0) {
     fprintf(stderr, "Invalid Graph widths: expected positive FWHM and nonnegative half-width.\n");
     fclose(file);
     return EXIT_FAILURE;
+}
+/* Legacy .set files end here. The optional XRange record specifies
+ * independent offset-Hz limits; 'auto' means let the renderer decide. */
+{
+    char trailing[MAX_LINE_LENGTH];
+    if (fgets(trailing, sizeof(trailing), file)) {
+        while (fgets(trailing, sizeof(trailing), file)) {
+            char left_token[128], right_token[128], extra;
+            char *p = skip_spaces(trailing);
+            if (*p == '\0' || *p == '\n' || *p == '#') continue;
+            if (sscanf(p, "XRange %127s %127s %c",
+                       left_token, right_token, &extra) != 2) {
+                fprintf(stderr, "Invalid optional XRange record.\n");
+                fclose(file);
+                return EXIT_FAILURE;
+            }
+            if (strcmp(left_token, "auto") != 0) {
+                char *tail = NULL;
+                x_left_override = strtod(left_token, &tail);
+                if (tail == left_token || *tail || !isfinite(x_left_override)) {
+                    fprintf(stderr, "Invalid XRange left bound.\n");
+                    fclose(file);
+                    return EXIT_FAILURE;
+                }
+            }
+            if (strcmp(right_token, "auto") != 0) {
+                char *tail = NULL;
+                x_right_override = strtod(right_token, &tail);
+                if (tail == right_token || *tail || !isfinite(x_right_override)) {
+                    fprintf(stderr, "Invalid XRange right bound.\n");
+                    fclose(file);
+                    return EXIT_FAILURE;
+                }
+            }
+            if (isfinite(x_left_override) && isfinite(x_right_override) &&
+                x_left_override >= x_right_override) {
+                fprintf(stderr, "XRange left must be less than right.\n");
+                fclose(file);
+                return EXIT_FAILURE;
+            }
+            break;
+        }
+    }
 }
    fclose(file);
 double gamma = fwhm_hz / 2.0;
@@ -1213,10 +1257,24 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
                     ? WidthSpectrum
                     : ss_auto_spectrum_half_width(Spr, spr_count, Freq[m],
                                                    fwhm_hz, total_abs_j_hz);
+                /* Physical frequencies are nonnegative; clip automatic
+                 * windows at nu = 0, notably in zero and Earth fields.
+                 * Explicit bounds always take precedence. */
+                double x_left = -panel_half_width;
+                double x_right = panel_half_width;
                 if (WidthSpectrum == 0.0)
-                    fprintf(stderr,
-                        "AUTO X-RANGE spin=%d selected=%.6g Hz\n",
-                        Sgm[m], panel_half_width);
+                    x_left = fmax(x_left, -Freq[m]);
+                if (isfinite(x_left_override)) x_left = x_left_override;
+                if (isfinite(x_right_override)) x_right = x_right_override;
+                if (!(x_left < x_right)) {
+                    fprintf(stderr, "Invalid effective XRange for spin %d.\n",
+                            Sgm[m]);
+                    free(Spr);
+                    return EXIT_FAILURE;
+                }
+                fprintf(stderr,
+                    "X-RANGE spin=%d selected=[%.9g,%.9g] Hz\n",
+                    Sgm[m], x_left, x_right);
 	       sprintf(Kfile, "Res_%d_%05d.dat", Sgm[m], Bc); // write the broadened display spectrum
 	       fsi = fopen(Kfile, "w");
            if (fsi == NULL) {
@@ -1230,7 +1288,7 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
 	        * invariant DC contribution; do not use basis-dependent raw
 	        * i<j entries for numerically degenerate levels. */
 	       for (i=0; i<2000; i++) {
-	           Sgp[0][i] = -panel_half_width + panel_half_width*i/1000.0;
+	           Sgp[0][i] = x_left + (x_right - x_left)*i/1999.0;
 	           Sgp[1][i] = 0.0;
 	       }
 	       for (i=0; i<(int)spr_count; i++) {
@@ -1310,7 +1368,18 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
                       perror("setenv SPINSPEC_GRAPH_HEIGHTS");
                       return EXIT_FAILURE;
                   }
+                  char left_spec[64], right_spec[64];
+                  if (isfinite(x_left_override))
+                      snprintf(left_spec, sizeof(left_spec), "%.17g", x_left_override);
+                  else snprintf(left_spec, sizeof(left_spec), "auto");
+                  if (isfinite(x_right_override))
+                      snprintf(right_spec, sizeof(right_spec), "%.17g", x_right_override);
+                  else snprintf(right_spec, sizeof(right_spec), "auto");
+                  setenv("SPINSPEC_X_LEFT", left_spec, 1);
+                  setenv("SPINSPEC_X_RIGHT", right_spec, 1);
                   int group_plot_status = system(group_command);
+                  unsetenv("SPINSPEC_X_LEFT");
+                  unsetenv("SPINSPEC_X_RIGHT");
                   unsetenv("SPINSPEC_GRAPH_HEIGHTS");
                   if (group_plot_status != 0) {
                       fprintf(stderr, "Group spectrum plot failed.\n");
