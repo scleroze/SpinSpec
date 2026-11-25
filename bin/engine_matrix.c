@@ -363,6 +363,12 @@ if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
             char left_token[128], right_token[128], extra;
             char *p = skip_spaces(trailing);
             if (*p == '\0' || *p == '\n' || *p == '#') continue;
+            if (strncmp(p, "YRange ", 7) == 0) {
+                /* YRange is a display-only extension. The web app sends
+                 * validated per-spin bounds to the renderer via environment.
+                 * Standalone .set readers may safely ignore this line. */
+                continue;
+            }
             if (sscanf(p, "XRange %127s %127s %c",
                        left_token, right_token, &extra) != 2) {
                 fprintf(stderr, "Invalid optional XRange record.\n");
@@ -393,7 +399,7 @@ if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
                 fclose(file);
                 return EXIT_FAILURE;
             }
-            break;
+            /* Continue reading so XRange and YRange can coexist. */
         }
     }
 }
