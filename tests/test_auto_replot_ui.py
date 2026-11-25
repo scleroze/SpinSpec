@@ -38,6 +38,9 @@ assert "updateCalculationMode();" in page
 assert "fillFormFromSet(text);" in page
 assert 'id="lineWidth"' in page
 assert 'id="linewidths"' not in page
+assert 'id="heights"' not in page
+assert "heights: automaticGraphHeights()" in page
+assert "legacyHeights.map(v => Number(v) > 0 ? v : 'auto').join(' ')" in page
 assert "linewidths: getLinewidthsForEngine()" in page
 assert "return `${fwhm} 0`;" in page
 assert "function decodeSetDisplayWidth(widthLine, xRangeLine = '')" in page
