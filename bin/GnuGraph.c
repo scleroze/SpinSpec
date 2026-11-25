@@ -1,10 +1,29 @@
 #include "engine_matrix.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 double B0, sigma, freq, ampl, Hz=100, Bz=200;
 int i;
 int Color[] = {3,1,2,4,5,6,7,8,9};
+/* Read spin-indexed Y bounds provided by the web calculation. */
+static double requested_limit(const char *name, int spin) {
+  const char *p=getenv(name);
+  if (!p || !*p) return NAN;
+  while (*p) {
+    char *tail=NULL;
+    long index=strtol(p,&tail,10);
+    if (tail==p || *tail!=':') return NAN;
+    p=tail+1;
+    double value=strtod(p,&tail);
+    if (tail==p || !isfinite(value)) return NAN;
+    if (index==spin) return value;
+    if (!*tail) break;
+    if (*tail!=',') return NAN;
+    p=tail+1;
+  }
+  return NAN;
+}
 
 void GnuGraph(int Sg, int Sgm[], double B0, int Bc, double V_size[]) {
   FILE *gp = popen("gnuplot -persist","w"); // Gnuplot process stream
@@ -119,6 +138,14 @@ printf("parameters: sigma=%lf, freq=%lf", sigma, freq);
    double y_limit = (V_size[i] > 0.0)
        ? V_size[i]
        : (intensity_max > 0.0 ? intensity_max * 1.08 : 1.0);
+    double y_lower=requested_limit("SPINSPEC_Y_MIN",Sgm[i]);
+    double y_upper=requested_limit("SPINSPEC_Y_MAX",Sgm[i]);
+    if (!isfinite(y_lower)) y_lower=0.0;
+    if (!isfinite(y_upper)) y_upper=y_limit;
+    if (!(y_lower<y_upper)) {
+      fprintf(stderr,"Invalid Y bounds for spin %d\n",Sgm[i]);
+      exit(EXIT_FAILURE);
+    }
 
 //--------------------------------------------------------------------------
    double origin_y = h * (Sg-i-1);
@@ -128,13 +155,13 @@ printf("parameters: sigma=%lf, freq=%lf", sigma, freq);
    fprintf(gp, "set ytics nomirror\n");
    H_Sg = Hs*(Sg-i-1)+Hs*Shift_H-0.05; // position the chemical-shift annotation
    printf("\n%i Y range %f\n",i , V_size[i]);
-   fprintf(gp, "set yrange [0:%lf]\n", y_limit);
+   fprintf(gp, "set yrange [%.17g:%.17g]\n", y_lower, y_upper);
    fprintf(gp, "set label \"Spin %i\" at screen 0.07, %f offset 0, 0 font \",16\"\n", Sgm[i], H_Sg+0.03);
    fprintf(gp, "set label \"NMR frequency %.5f Hz\" at screen 0.7, %f offset 0, 0 font \",16\"\n", freq, H_Sg);   
    Sigma_Hz = freq*sigma*1e-6;
    fprintf(gp, "set label \"σ = %.2f ppm (%.5lf Hz)\" at screen 0.07, %f offset 0, 0 font \",16\"\n",sigma, Sigma_Hz, H_Sg);
    printf("%i Sgm %i\n", i, Sgm[i]);
-   fprintf(gp, "set yrange [0:%lf]\n", y_limit);
+   fprintf(gp, "set yrange [%.17g:%.17g]\n", y_lower, y_upper);
    fprintf(gp, "plot \"Res_%i_%05d.dat\" skip 1 with l lt %i lw 2\n", Sgm[i], Bc, Color[i]);
    fprintf(gp, "unset label\n");
 }

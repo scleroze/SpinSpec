@@ -19,11 +19,17 @@
 #include <stdlib.h>
 #include <gsl/gsl_matrix.h>
 #include <gsl/gsl_eigen.h>
+#include <gsl/gsl_blas.h>
 #include "engine_matrix.h"
 #include "observer_groups.h"
 #include "observer_invariant.h"
 #include <ctype.h>
 #include <time.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <errno.h>
+#include <unistd.h>  /* access(), X_OK */
+extern char **environ;
 #define MAX_LINE_LENGTH 1024
 #define MAX_WORD_LENGTH 256
 
@@ -54,6 +60,92 @@ int read_line_or_exit(FILE *file, char *line, size_t line_size) {
         }
     }
     return 1; 
+}
+
+
+/* Sort transition pairs by frequency. */
+/* Apply optional per-Graph-panel YRange values to the common renderer.
+ * A single number applies to all displayed panels; auto removes the bound. */
+static int ss_apply_y_limits(const char *name, const char *spec,
+                             const int *spins, int count)
+{
+    if(!spec || !*spec) return 0;
+    char input[512];
+    if(strlen(spec)>=sizeof(input)) return -1;
+    strcpy(input,spec);
+    char *values[128],*save=NULL;
+    int n=0;
+    for(char *p=strtok_r(input,",",&save);p;
+        p=strtok_r(NULL,",",&save)){
+        if(n>=128)return -1;
+        values[n++]=p;
+    }
+    if(n!=1 && n!=count)return -1;
+    char output[2048]={0};
+    size_t length=0;
+    for(int i=0;i<count;i++){
+        const char *raw=values[n==1?0:i];
+        if(strcmp(raw,"auto")==0)continue;
+        char *tail=NULL;
+        double v=strtod(raw,&tail);
+        if(tail==raw || *tail || !isfinite(v))return -1;
+        int written=snprintf(output+length,sizeof(output)-length,
+            "%s%d:%.17g",length?",":"",spins[i],v);
+        if(written<0 || (size_t)written>=sizeof(output)-length)return -1;
+        length+=(size_t)written;
+    }
+    return setenv(name,output,1)==0 ? 0 : -1;
+}
+
+static int ss_compare_frequency(const void *a, const void *b)
+{
+    const double fa = ((const double *)a)[0];
+    const double fb = ((const double *)b)[0];
+    return (fa > fb) - (fa < fb);
+}
+
+
+static double ss_wall_seconds(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + 1e-9 * ts.tv_nsec;
+}
+
+/*
+ * Zero Graph spectrum half-width requests automatic horizontal scaling.
+ * Choose significant transitions near each selected spin's Larmor reference.
+ * J-couplings set a conservative search region so distant isotope resonances
+ * cannot dictate the window. This affects Res/graph output only, not Sp/CSV.
+ * A strictly positive user half-width bypasses this function completely.
+ */
+static double ss_auto_spectrum_half_width(const double *spr, size_t count,
+                                          double reference_hz, double fwhm_hz,
+                                          double total_abs_j_hz)
+{
+    const double search_radius = fmax(40.0,
+        fmax(50.0 * fwhm_hz, 2.0 * total_abs_j_hz + 10.0 * fwhm_hz));
+    double peak = 0.0;
+    for (size_t n = 0; n < count; ++n) {
+        const double delta = fabs(spr[2 * n] - reference_hz);
+        const double strength = spr[2 * n + 1];
+        if (delta <= search_radius && strength > peak)
+            peak = strength;
+    }
+
+    const double minimum = fmax(10.0, 12.0 * fwhm_hz);
+    if (peak <= 0.0)
+        return minimum;
+
+    const double cutoff = fmax(1e-15, peak * 1e-8);
+    double outer = 0.0;
+    for (size_t n = 0; n < count; ++n) {
+        const double delta = fabs(spr[2 * n] - reference_hz);
+        if (delta <= search_radius &&
+            spr[2 * n + 1] >= cutoff && delta > outer)
+            outer = delta;
+    }
+    return fmax(minimum, outer * 1.12 + fmax(4.0 * fwhm_hz, 2.0));
 }
 
 int main(int argc, char *argv[]) {
@@ -288,8 +380,72 @@ int main(int argc, char *argv[]) {
  * The Lorentzian half-width at half maximum is gamma = FWHM/2.
  */
 double fwhm_hz, WidthLine, WidthSpectrum;
-fscanf(file, "%lf %lf\n", &fwhm_hz, &WidthSpectrum);
+double x_left_override = NAN, x_right_override = NAN;
+char y_min_requested[512]={0}, y_max_requested[512]={0};
+if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
+    !isfinite(fwhm_hz) || fwhm_hz <= 0.0 ||
+    !isfinite(WidthSpectrum) || WidthSpectrum < 0.0) {
+    fprintf(stderr, "Invalid Graph widths: expected positive FWHM and nonnegative half-width.\n");
+    fclose(file);
+    return EXIT_FAILURE;
+}
+/* Legacy .set files end here. The optional XRange record specifies
+ * independent offset-Hz limits; 'auto' means let the renderer decide. */
+{
+    char trailing[MAX_LINE_LENGTH];
+    if (fgets(trailing, sizeof(trailing), file)) {
+        while (fgets(trailing, sizeof(trailing), file)) {
+            char left_token[128], right_token[128], extra;
+            char *p = skip_spaces(trailing);
+            if (*p == '\0' || *p == '\n' || *p == '#') continue;
+            if (strncmp(p, "YRange ", 7) == 0) {
+                if(sscanf(p,"YRange %511s %511s %c",
+                          y_min_requested,y_max_requested,&extra)!=2){
+                    fprintf(stderr,"Invalid optional YRange record.\n");
+                    fclose(file);return EXIT_FAILURE;
+                }
+                continue;
+            }
+            if (sscanf(p, "XRange %127s %127s %c",
+                       left_token, right_token, &extra) != 2) {
+                fprintf(stderr, "Invalid optional XRange record.\n");
+                fclose(file);
+                return EXIT_FAILURE;
+            }
+            if (strcmp(left_token, "auto") != 0) {
+                char *tail = NULL;
+                x_left_override = strtod(left_token, &tail);
+                if (tail == left_token || *tail || !isfinite(x_left_override)) {
+                    fprintf(stderr, "Invalid XRange left bound.\n");
+                    fclose(file);
+                    return EXIT_FAILURE;
+                }
+            }
+            if (strcmp(right_token, "auto") != 0) {
+                char *tail = NULL;
+                x_right_override = strtod(right_token, &tail);
+                if (tail == right_token || *tail || !isfinite(x_right_override)) {
+                    fprintf(stderr, "Invalid XRange right bound.\n");
+                    fclose(file);
+                    return EXIT_FAILURE;
+                }
+            }
+            if (isfinite(x_left_override) && isfinite(x_right_override) &&
+                x_left_override >= x_right_override) {
+                fprintf(stderr, "XRange left must be less than right.\n");
+                fclose(file);
+                return EXIT_FAILURE;
+            }
+            /* Continue reading so XRange and YRange can coexist. */
+        }
+    }
+}
    fclose(file);
+if(ss_apply_y_limits("SPINSPEC_Y_MIN",y_min_requested,Sgm,Sg)!=0 ||
+   ss_apply_y_limits("SPINSPEC_Y_MAX",y_max_requested,Sgm,Sg)!=0){
+    fprintf(stderr,"Invalid YRange: one value or one per Graph panel expected.\n");
+    return EXIT_FAILURE;
+}
 double gamma = fwhm_hz / 2.0;
 WidthLine = gamma * gamma;
 /*
@@ -441,10 +597,87 @@ for (int i = 0; i < StatesNumber; i++) {
 	    gsl_vector *eval = gsl_vector_alloc(StatesNumber);
 	    gsl_matrix *evec = gsl_matrix_alloc(StatesNumber, StatesNumber);
 
-	    gsl_eigen_symmv_workspace *workspace = gsl_eigen_symmv_alloc(StatesNumber);
-	    gsl_eigen_symmv(Am, eval, evec, workspace);
+	    /* Exact diagonalization in sectors of conserved total Mz. */
+{
+    int count[S+1], start[S+2], next[S+1];
+    int basis[StatesNumber], sector[StatesNumber];
 
-	    gsl_eigen_symmv_free(workspace);
+    for (int q=0; q<=S; ++q) count[q]=0;
+
+    for (int p=0; p<StatesNumber; ++p) {
+        int sum=0;
+        for (int q=0; q<S; ++q) {
+            if (C[q][p] != 1 && C[q][p] != -1) {
+                fprintf(stderr, "Invalid spin projection\n");
+                return EXIT_FAILURE;
+            }
+            sum += C[q][p];
+        }
+        sector[p]=(S+sum)/2;
+        count[sector[p]]++;
+    }
+
+    start[0]=0;
+    for (int q=0; q<=S; ++q)
+        start[q+1]=start[q]+count[q];
+
+    for (int q=0; q<=S; ++q) next[q]=start[q];
+
+    for (int p=0; p<StatesNumber; ++p)
+        basis[next[sector[p]]++]=p;
+
+    /* Check that inter-sector Hamiltonian elements vanish. */
+    for (int p=0; p<StatesNumber; ++p)
+        for (int q=p+1; q<StatesNumber; ++q)
+            if (sector[p]!=sector[q] &&
+                fabs(gsl_matrix_get(Am,p,q))>1e-10) {
+                fprintf(stderr, "Hamiltonian violates Mz conservation\n");
+                return EXIT_FAILURE;
+            }
+
+    gsl_matrix_set_zero(evec);
+
+    for (int q=0; q<=S; ++q) {
+        int dim=count[q];
+        int off=start[q];
+
+        fprintf(stderr,"BLOCK sector=%d dimension=%d\n",q,dim);
+
+        if (dim==1) {
+            int p=basis[off];
+            gsl_vector_set(eval,off,gsl_matrix_get(Am,p,p));
+            gsl_matrix_set(evec,p,off,1.0);
+            continue;
+        }
+
+        gsl_matrix *H=gsl_matrix_alloc(dim,dim);
+        gsl_matrix *V=gsl_matrix_alloc(dim,dim);
+        gsl_vector *E=gsl_vector_alloc(dim);
+        gsl_eigen_symmv_workspace *W=gsl_eigen_symmv_alloc(dim);
+
+        for (int r=0; r<dim; ++r)
+            for (int c=0; c<dim; ++c)
+                gsl_matrix_set(H,r,c,
+                    gsl_matrix_get(Am,basis[off+r],basis[off+c]));
+
+        if (gsl_eigen_symmv(H,E,V,W)!=0) {
+            fprintf(stderr,"Block diagonalization failed\n");
+            return EXIT_FAILURE;
+        }
+
+        for (int c=0; c<dim; ++c) {
+            gsl_vector_set(eval,off+c,gsl_vector_get(E,c));
+            for (int r=0; r<dim; ++r)
+                gsl_matrix_set(evec,basis[off+r],off+c,
+                               gsl_matrix_get(V,r,c));
+        }
+
+        gsl_eigen_symmv_free(W);
+        gsl_vector_free(E);
+        gsl_matrix_free(V);
+        gsl_matrix_free(H);
+    }
+}
 
     /* Match the energy-block tolerance of observer_invariant.h. The
      * finite-frequency strength sum, subtracted from Tr(O^2)/2, gives
@@ -457,6 +690,23 @@ for (int i = 0; i < StatesNumber; i++) {
     }
     const double observer_energy_tolerance =
         fmax(1e-10, 64.0 * DBL_EPSILON * max_abs_energy);
+    /* The replot utility must use the identical energy-block cutoff, so
+     * sub-tolerance transitions remain in the invariant DC contribution. */
+    {
+        char tolerance_file[64];
+        snprintf(tolerance_file, sizeof(tolerance_file),
+                 "Sp_tolerance_%05d.dat", Bc);
+        FILE *saved_tolerance = fopen(tolerance_file, "w");
+        if (!saved_tolerance) {
+            perror(tolerance_file);
+            return EXIT_FAILURE;
+        }
+        fprintf(saved_tolerance, "%.17g\n", observer_energy_tolerance);
+        if (fclose(saved_tolerance) != 0) {
+            perror(tolerance_file);
+            return EXIT_FAILURE;
+        }
+    }
     double observer_total_power = 0.0;
     for (int spin = 0; spin < S; ++spin) {
         const double weight = G[spin] / SS_OBS_GAMMA_REF_HZ_PER_MT;
@@ -487,48 +737,310 @@ for (int i = 0; i < StatesNumber; i++) {
 	n=0;
         fprintf(fsp, "n     x1      x2   i j I\n");
         int progress = 0; // number of completed eigenstate pairs
-        int total = StatesNumber * (StatesNumber - 1) / 2; // total unordered eigenstate pairs
-#pragma omp parallel for private(j, k, l, x1, x2) shared(fsp) reduction(+:observer_ac_power)
-for (i = 0; i < StatesNumber - 1; i++) {
-    for (j = i + 1; j < StatesNumber; j++) {
-        double Dm = 0;
-        for (k = 0; k < StatesNumber - 1; k++) {
-            for (l = k + 1; l < StatesNumber; l++) {
-                if (I[k*StatesNumber + l] != 0) {
-                    int spin = I[k*StatesNumber + l] - 1;
-                    double weight = G[spin] / (2.0 * SS_OBS_GAMMA_REF_HZ_PER_MT);
-                    Dm += weight * (
-                        gsl_matrix_get(evec, k, i) * gsl_matrix_get(evec, l, j)
-                        + gsl_matrix_get(evec, l, i) * gsl_matrix_get(evec, k, j));
+        int total = StatesNumber * (StatesNumber - 1) / 2;
 
+        char plot_filename[64];
+        snprintf(plot_filename, sizeof(plot_filename),
+                 "Sp_plot_%05d.dat", Bc);
 
-                }
+        FILE *fsp_plot = fopen(plot_filename, "w");
+        if (!fsp_plot) {
+            perror(plot_filename);
+            return EXIT_FAILURE;
+        }
+
+        fprintf(fsp_plot, "n     x1      x2   i j I\n");
+
+        double *Spr = NULL;
+        size_t spr_count = 0;
+        size_t spr_capacity = 0;
+ // total unordered eigenstate pairs
+
+    /*
+     * Gamma-weighted observer transformation:
+     *
+     *     Mobs = V^T O V
+     *
+     * O has nonzero matrix elements only for single-spin flips.
+     * Full-precision transition strengths are retained.
+     */
+
+    gsl_matrix *OV = gsl_matrix_calloc(
+        StatesNumber, StatesNumber
+    );
+
+    gsl_matrix *Mobs = gsl_matrix_alloc(
+        StatesNumber, StatesNumber
+    );
+
+    if (!OV || !Mobs) {
+        fprintf(stderr, "Observer allocation failed\n");
+        return EXIT_FAILURE;
+    }
+
+    for (int a = 0; a < StatesNumber; ++a) {
+        for (int b = a + 1; b < StatesNumber; ++b) {
+
+            int spin = I[a * StatesNumber + b] - 1;
+            if (spin < 0) continue;
+
+            double weight = G[spin] /
+                (2.0 * SS_OBS_GAMMA_REF_HZ_PER_MT);
+
+            double *row_a = OV->data + a * OV->tda;
+            double *row_b = OV->data + b * OV->tda;
+
+            for (int col = 0; col < StatesNumber; ++col) {
+                row_a[col] += weight *
+                    gsl_matrix_get(evec, b, col);
+
+                row_b[col] += weight *
+                    gsl_matrix_get(evec, a, col);
             }
         }
-        x1 = fabs(gsl_vector_get(eval, j) - gsl_vector_get(eval, i));
-        x2 = Dm * Dm;
-        if (x1 > observer_energy_tolerance) observer_ac_power += x2;
+    }
 
-        #pragma omp critical
-        {
+    if (gsl_blas_dgemm(
+            CblasTrans, CblasNoTrans,
+            1.0, evec, OV,
+            0.0, Mobs) != 0) {
+
+        fprintf(stderr, "BLAS transformation failed\n");
+        return EXIT_FAILURE;
+    }
+
+    double ss_t_write = ss_wall_seconds();
+for (i = 0; i < StatesNumber - 1; ++i) {
+        for (j = i + 1; j < StatesNumber; ++j) {
+
+            x1 = fabs(
+                gsl_vector_get(eval, j) -
+                gsl_vector_get(eval, i)
+            );
+
+            double amplitude = gsl_matrix_get(Mobs, i, j);
+            x2 = amplitude * amplitude;
+
             /*
-             * Legacy final output column I[i,j] is indexed by product-basis
-             * states, not Hamiltonian eigenstates; it must not be interpreted
-             * as a physical assignment of the eigenstate transition.
+             * Accumulate unrounded finite-frequency strength.
+             * This preserves the invariant DC calculation.
              */
-            fprintf(fsp, "%d %.17g %.17g %d %d %d\n", n, x1, x2, i + 1, j + 1, I[i*StatesNumber + j]);
-            n++;
-            progress++;
+            if (x1 > observer_energy_tolerance)
+                observer_ac_power += x2;
 
-            float percent = (progress * 100.0) / total;
-            printf("\rProgress: [%-50s] %.2f%%", 
-                   "==================================================" + (50 - (int)(percent / 2)), 
-                   percent);
-            fflush(stdout);
+
+            /* Full transition output is deferred. */
+
+            ++n;
+            ++progress;
+
+            if (x1 > observer_energy_tolerance &&
+                x2 >= 1e-12) {
+
+                if (spr_count == spr_capacity) {
+                    size_t next_capacity =
+                        spr_capacity ? spr_capacity * 2 : 8192;
+
+                    double *tmp = realloc(
+                        Spr,
+                        2 * next_capacity * sizeof(double)
+                    );
+
+                    if (!tmp) {
+                        fprintf(stderr,
+                                "Spr allocation failed\n");
+                        exit(EXIT_FAILURE);
+                    }
+
+                    Spr = tmp;
+                    spr_capacity = next_capacity;
+                }
+
+                Spr[2 * spr_count] = x1;
+                Spr[2 * spr_count + 1] = x2;
+                ++spr_count;
+            }
+
+            /*
+             * Visualization only.
+             * Full-precision Sp and broadened Res retain
+             * all their original contributions.
+             */
+            if (x2 >= 5e-7) {
+                fprintf(fsp_plot,
+                    "%d %.17g %.17g %d %d %d\n",
+                    n - 1, x1, x2,
+                    i + 1, j + 1,
+                    I[i * StatesNumber + j]
+                );
+            }
+
         }
     }
-}
+
+
+    /*
+     * Parallel, deterministic high-precision transition writer.
+     * Physics, observer_ac_power and Spr were computed serially.
+     * Two workers format disjoint, consecutive state-pair ranges.
+     */
+    {
+        double ss_t_parallel = ss_wall_seconds();
+
+        const int N = StatesNumber;
+        const size_t total_pairs =
+            (size_t)N * (size_t)(N - 1) / 2;
+
+        int split = 0;
+
+        /* Split by transition count, not by number of rows. */
+        while (split < N - 1) {
+            size_t prefix =
+                (size_t)split *
+                (2 * (size_t)N - (size_t)split - 1) / 2;
+
+            if (prefix >= total_pairs / 2)
+                break;
+
+            ++split;
+        }
+
+        FILE *parts[2] = {NULL, NULL};
+        int failures[2] = {0, 0};
+
+        #pragma omp parallel for schedule(static) num_threads(2)
+        for (int worker = 0; worker < 2; ++worker) {
+
+            const int begin = worker == 0 ? 0 : split;
+            const int finish = worker == 0 ? split : N - 1;
+
+            FILE *part = tmpfile();
+
+            if (!part) {
+                failures[worker] = 1;
+                continue;
+            }
+
+            setvbuf(part, NULL, _IOFBF, 1 << 20);
+
+            parts[worker] = part;
+
+            for (int row = begin;
+                 row < finish && !failures[worker];
+                 ++row) {
+
+                const double energy_i =
+                    gsl_vector_get(eval, row);
+
+                const size_t first_index =
+                    (size_t)row *
+                    (2 * (size_t)N - (size_t)row - 1) / 2;
+
+                for (int col = row + 1; col < N; ++col) {
+
+                    const double frequency = fabs(
+                        gsl_vector_get(eval, col) - energy_i
+                    );
+
+                    const double amplitude =
+                        gsl_matrix_get(Mobs, row, col);
+
+                    const double strength =
+                        amplitude * amplitude;
+
+                    const int index = (int)(
+                        first_index +
+                        (size_t)(col - row - 1)
+                    );
+
+                    const int lookup = I[row * N + col];
+
+                    int written;
+
+                    if (strength == 0.0) {
+                        written = fprintf(
+                            part,
+                            "%d %.17g 0 %d %d %d\n",
+                            index, frequency,
+                            row + 1, col + 1, lookup
+                        );
+                    } else {
+                        written = fprintf(
+                            part,
+                            "%d %.17g %.17g %d %d %d\n",
+                            index, frequency, strength,
+                            row + 1, col + 1, lookup
+                        );
+                    }
+
+                    if (written < 0) {
+                        failures[worker] = 1;
+                        break;
+                    }
+                }
+            }
+
+            if (fflush(part) != 0)
+                failures[worker] = 1;
+
+            if (fseek(part, 0, SEEK_SET) != 0)
+                failures[worker] = 1;
+        }
+
+        int write_error = failures[0] || failures[1] ||
+                          !parts[0] || !parts[1];
+
+        const size_t buffer_size = 1 << 20;
+        unsigned char *buffer = malloc(buffer_size);
+
+        if (!buffer)
+            write_error = 1;
+
+        if (!write_error) {
+            for (int worker = 0; worker < 2; ++worker) {
+
+                size_t bytes;
+
+                while ((bytes = fread(
+                            buffer, 1, buffer_size,
+                            parts[worker])) != 0) {
+
+                    if (fwrite(buffer, 1, bytes, fsp) != bytes) {
+                        write_error = 1;
+                        break;
+                    }
+                }
+
+                if (ferror(parts[worker]))
+                    write_error = 1;
+
+                if (write_error)
+                    break;
+            }
+        }
+
+        free(buffer);
+
+        for (int worker = 0; worker < 2; ++worker)
+            if (parts[worker])
+                fclose(parts[worker]);
+
+        if (write_error) {
+            fprintf(stderr,
+                "Parallel transition writer failed\n");
+            return EXIT_FAILURE;
+        }
+
+        fprintf(stderr,
+            "PROFILE parallel formatting: %.3f s\n",
+            ss_wall_seconds() - ss_t_parallel);
+    }
+
+gsl_matrix_free(Mobs);
+    gsl_matrix_free(OV);
+
     printf("\nDone!\n");
+
 
     /* DC = 1/2 Tr(O^2) - sum_{nondegenerate i<j} |O_ij|^2.
      * Tr(O^2)/2 = 2^S / 8 * sum_k (gamma_k/gamma_H)^2.
@@ -699,52 +1211,89 @@ for (i = 0; i < StatesNumber - 1; i++) {
 	    gsl_vector_free(eval);
 	    gsl_matrix_free(evec);
 	    gsl_matrix_free(Am);
-	  fclose(fsp);
+
+          fclose(fsp);
+    fprintf(stderr,
+        "PROFILE transitions and DC: %.3f s\n",
+        ss_wall_seconds() - ss_t_write);
+          fclose(fsp_plot);
+
+          fprintf(stderr,
+                  "FASTIO transitions for broadening: %zu / %d\n",
+                  spr_count, n);
+
+          double ss_t_group = ss_wall_seconds();
+    /* Spr already contains full-precision transitions. */
 
 /*
- * Read discrete transitions and construct Lorentz-broadened display curves.
- * Each Res file uses the same complete transition list; it is shifted to a
- * spin-specific reference frequency but is NOT a nucleus-selective spectrum.
+ * Group nearby transitions for Lorentzian broadening only.
+ * Preserve Sp, Sp_plot and invariant DC output.
+ *
+ * Maximum frequency span within each group: 1e-12 Hz.
+ * Strength sums and weighted frequency offsets use long double.
  */
-	   int a, b, c, d;
-// Count data rows in Sp_<frame>.dat, excluding the header.
-	   if ((fsi = fopen(fname, "r")) == NULL) {
-            perror(fname);
-            return EXIT_FAILURE;
+{
+    const double tolerance_hz = 1e-12;
+    const size_t original_count = spr_count;
+    size_t grouped_count = 0;
+    double max_span_hz = 0.0;
+
+    if (spr_count > 1) {
+        qsort(Spr, spr_count, 2 * sizeof(double),
+              ss_compare_frequency);
+    }
+
+    size_t pos = 0;
+
+    while (pos < original_count) {
+        const double base_frequency = Spr[2 * pos];
+        long double strength_sum = 0.0L;
+        long double weighted_offset = 0.0L;
+
+        size_t next = pos;
+
+        while (next < original_count &&
+               Spr[2 * next] - base_frequency <= tolerance_hz) {
+
+            const double frequency = Spr[2 * next];
+            const double strength = Spr[2 * next + 1];
+
+            strength_sum += (long double)strength;
+            weighted_offset +=
+                (long double)strength *
+                (long double)(frequency - base_frequency);
+
+            ++next;
         }
-	   n=0;     
-	   while(fscanf(fsi, "%*[^\n]%*c") != EOF) 
-	       n++; 
-            n=n-1;
-	   if (ferror(fsi)) printf("err\n");
-	   fscanf(fsi, "%*[^\n]%*c"); 
-	   fclose(fsi);
-	 	   
 
-           int rows = n;  // 
-           double *Spr = malloc(2 * rows * sizeof(double));
-           if (!Spr) {
-              perror("Memory allocation failed");
-              exit(1);
-           }
+        const double span =
+            Spr[2 * (next - 1)] - base_frequency;
 
-           i = 0;
-           fsi = fopen(fname, "r");
-           if (fsi == NULL) {
-               perror(fname);
-               return EXIT_FAILURE;
-           }
+        if (span > max_span_hz)
+            max_span_hz = span;
 
-           char header[256];
-           fgets(header, sizeof(header), fsi);
+        Spr[2 * grouped_count] =
+            base_frequency +
+            (double)(weighted_offset / strength_sum);
 
-           while (fscanf(fsi, "%d %lf %lf %d %d %d\n", &a, &x1, &x2, &b, &c, &d) != EOF) {
-                  Spr[2*i] = x1;
-                  Spr[2*i+1] = x2;
-                  i++;
-           } 
-           
-           fclose(fsi);  
+        Spr[2 * grouped_count + 1] =
+            (double)strength_sum;
+
+        ++grouped_count;
+        pos = next;
+    }
+
+    spr_count = grouped_count;
+
+    fprintf(stderr,
+        "GROUPED transitions: %zu -> %zu; max span %.6g Hz\n",
+        original_count, grouped_count, max_span_hz);
+}
+
+
+
+fprintf(stderr, "PROFILE grouping: %.3f s\n",
+        ss_wall_seconds() - ss_t_group);
 
 /*
  * Each selected spin gets a 2000-point frequency grid centered on
@@ -757,11 +1306,40 @@ for (i = 0; i < StatesNumber - 1; i++) {
 	    double Sgp[2][2000]; // frequency grid and Lorentzian intensity
 	    double Freq[10];
 	    char Kfile[50];
+        double total_abs_j_hz = 0.0;
+        if (WidthSpectrum == 0.0) {
+            for (int a = 0; a < S; ++a)
+                for (int b = a + 1; b < S; ++b)
+                    total_abs_j_hz += fabs(Jm[a][b]);
+        }
 
-	    for (m=0; m<Sg; m++) { // one display window per selected spin
+	    double ss_t_broad = ss_wall_seconds();
+for (m=0; m<Sg; m++) { // one display window per selected spin
                 printf("spin %i %d\n", m, Sgm[m]);
                 Freq[m] = fabs(B0*G[Sgm[m]]*(1-Sigma[Sgm[m]]/1e6)); // reference Larmor frequency in Hz
                 printf("frequency %i %lf\n", m, Freq[m]);
+                const double panel_half_width = WidthSpectrum > 0.0
+                    ? WidthSpectrum
+                    : ss_auto_spectrum_half_width(Spr, spr_count, Freq[m],
+                                                   fwhm_hz, total_abs_j_hz);
+                /* Physical frequencies are nonnegative; clip automatic
+                 * windows at nu = 0, notably in zero and Earth fields.
+                 * Explicit bounds always take precedence. */
+                double x_left = -panel_half_width;
+                double x_right = panel_half_width;
+                if (WidthSpectrum == 0.0)
+                    x_left = fmax(x_left, -Freq[m]);
+                if (isfinite(x_left_override)) x_left = x_left_override;
+                if (isfinite(x_right_override)) x_right = x_right_override;
+                if (!(x_left < x_right)) {
+                    fprintf(stderr, "Invalid effective XRange for spin %d.\n",
+                            Sgm[m]);
+                    free(Spr);
+                    return EXIT_FAILURE;
+                }
+                fprintf(stderr,
+                    "X-RANGE spin=%d selected=[%.9g,%.9g] Hz\n",
+                    Sgm[m], x_left, x_right);
 	       sprintf(Kfile, "Res_%d_%05d.dat", Sgm[m], Bc); // write the broadened display spectrum
 	       fsi = fopen(Kfile, "w");
            if (fsi == NULL) {
@@ -775,10 +1353,10 @@ for (i = 0; i < StatesNumber - 1; i++) {
 	        * invariant DC contribution; do not use basis-dependent raw
 	        * i<j entries for numerically degenerate levels. */
 	       for (i=0; i<2000; i++) {
-	           Sgp[0][i] = -WidthSpectrum + WidthSpectrum*i/1000.0;
+	           Sgp[0][i] = x_left + (x_right - x_left)*i/1999.0;
 	           Sgp[1][i] = 0.0;
 	       }
-	       for (i=0; i<n; i++) {
+	       for (i=0; i<(int)spr_count; i++) {
 	           if (Spr[2*i] <= observer_energy_tolerance) continue;
 	           for (j=0; j<2000; j++) {
 	               double diff = Spr[2*i] - (Sgp[0][j] + Freq[m]);
@@ -797,9 +1375,81 @@ for (i = 0; i < StatesNumber - 1; i++) {
 	     }
 	 free(Spr);
 
-          char command[256];
-          sprintf(command, "./matrix_graph %s %d", Mfile, Bc); // invoke the graphing helper for this field step
-          system(command);
+          fprintf(stderr, "PROFILE broadening: %.3f s\n",
+        ss_wall_seconds() - ss_t_broad);
+
+    /* Pass argv directly; .set filenames may contain spaces, parentheses
+     * or other shell metacharacters.  No shell interpretation is needed. */
+    /* Unified Gnuplot executable handles ordinary and optional group
+     * displays in one invocation. The legacy graph launcher is retained
+     * as a compatibility fallback for old standalone installations. */
+    if (access("./group_graph", X_OK) == 0) {
+        char frame_s[32], fwhm_s[64], width_s[64];
+        snprintf(frame_s, sizeof(frame_s), "%d", Bc);
+        snprintf(fwhm_s, sizeof(fwhm_s), "%.17g", fwhm_hz);
+        snprintf(width_s, sizeof(width_s), "%.17g", WidthSpectrum);
+        if(setenv("SPINSPEC_MODEL_FILE",Mfile,1)!=0) {
+            perror("SPINSPEC_MODEL_FILE");return EXIT_FAILURE;
+        }
+        char heights_spec[4096]={0};
+        size_t length=0;
+        for(int h=0;h<Sg;h++){
+            int written=snprintf(heights_spec+length,sizeof(heights_spec)-length,
+                "%s%d:%.17g",h?",":"",Sgm[h],V_size[h]);
+            if(written<0||(size_t)written>=sizeof(heights_spec)-length)
+                return EXIT_FAILURE;
+            length+=(size_t)written;
+        }
+        setenv("SPINSPEC_GRAPH_HEIGHTS",heights_spec,1);
+        char xl[64],xr[64];
+        if(isfinite(x_left_override))snprintf(xl,sizeof(xl),"%.17g",x_left_override);
+        else strcpy(xl,"auto");
+        if(isfinite(x_right_override))snprintf(xr,sizeof(xr),"%.17g",x_right_override);
+        else strcpy(xr,"auto");
+        setenv("SPINSPEC_X_LEFT",xl,1);
+        setenv("SPINSPEC_X_RIGHT",xr,1);
+        char *args[]={"./group_graph",frame_s,fwhm_s,width_s,NULL};
+        pid_t pid;
+        int err=posix_spawn(&pid,"./group_graph",NULL,NULL,args,environ);
+        if(err!=0){
+            fprintf(stderr,"Cannot start unified graph: %s\n",strerror(err));
+            return EXIT_FAILURE;
+        }
+        int status=0;
+        pid_t done;
+        do {done=waitpid(pid,&status,0);} while(done<0&&errno==EINTR);
+        unsetenv("SPINSPEC_MODEL_FILE");
+        unsetenv("SPINSPEC_GRAPH_HEIGHTS");
+        unsetenv("SPINSPEC_X_LEFT");
+        unsetenv("SPINSPEC_X_RIGHT");
+        if(done<0||!WIFEXITED(status)||WEXITSTATUS(status)!=0){
+            fprintf(stderr,"Unified graph failed (status=%d)\n",status);
+            return EXIT_FAILURE;
+        }
+    } else {
+    char command[256];
+    char graph_frame[32];
+    snprintf(graph_frame, sizeof(graph_frame), "%d", Bc);
+    char *graph_argv[] = {"./matrix_graph", Mfile, graph_frame, NULL};
+    pid_t graph_pid;
+    int spawn_error = posix_spawn(&graph_pid, "./matrix_graph",
+                                  NULL, NULL, graph_argv, environ);
+    if (spawn_error != 0) {
+        fprintf(stderr, "Cannot start matrix_graph: %s\n",
+                strerror(spawn_error));
+        return EXIT_FAILURE;
+    }
+    int matrix_plot_status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(graph_pid, &matrix_plot_status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited < 0 || !WIFEXITED(matrix_plot_status) ||
+        WEXITSTATUS(matrix_plot_status) != 0) {
+        fprintf(stderr, "matrix_graph failed (status=%d)\n",
+                matrix_plot_status);
+        return EXIT_FAILURE;
+    }
           /* In optional group mode, render the invariant result through
              SpinSpec's native C/Gnuplot plotting path as a separate JPEG.
              Legacy data_*.jpg and Res_*.dat remain untouched. */
@@ -808,7 +1458,8 @@ for (i = 0; i < StatesNumber - 1; i++) {
               if (groups_mode && *groups_mode) {
                   char group_command[192];
                   snprintf(group_command, sizeof(group_command),
-                           "./group_graph %d %.12g", Bc, fwhm_hz);
+                           "./group_graph %d %.12g %.17g", Bc, fwhm_hz,
+                           WidthSpectrum);
                   /* Pass Graph heights in spin-indexed form, rather than
                    * panel order: Graph 3 0 and Graph 0 3 must both work.
                    * A non-positive height requests automatic Y scaling. */
@@ -829,7 +1480,18 @@ for (i = 0; i < StatesNumber - 1; i++) {
                       perror("setenv SPINSPEC_GRAPH_HEIGHTS");
                       return EXIT_FAILURE;
                   }
+                  char left_spec[64], right_spec[64];
+                  if (isfinite(x_left_override))
+                      snprintf(left_spec, sizeof(left_spec), "%.17g", x_left_override);
+                  else snprintf(left_spec, sizeof(left_spec), "auto");
+                  if (isfinite(x_right_override))
+                      snprintf(right_spec, sizeof(right_spec), "%.17g", x_right_override);
+                  else snprintf(right_spec, sizeof(right_spec), "auto");
+                  setenv("SPINSPEC_X_LEFT", left_spec, 1);
+                  setenv("SPINSPEC_X_RIGHT", right_spec, 1);
                   int group_plot_status = system(group_command);
+                  unsetenv("SPINSPEC_X_LEFT");
+                  unsetenv("SPINSPEC_X_RIGHT");
                   unsetenv("SPINSPEC_GRAPH_HEIGHTS");
                   if (group_plot_status != 0) {
                       fprintf(stderr, "Group spectrum plot failed.\n");
@@ -838,6 +1500,7 @@ for (i = 0; i < StatesNumber - 1; i++) {
               }
           }
           
+	     } /* end legacy compatibility fallback */
 	 printf("Cycle\n");
     B0 = B0 + BS;
     Bc++; 
