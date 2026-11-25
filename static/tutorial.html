@@ -73,8 +73,8 @@
         <p>Spin indices for which spectra should be plotted.</p>
       </div>
       <div class="field">
-        <b>Graph heights</b>
-        <p>One vertical scale value per displayed spin. <code>0</code> selects automatic height; a positive number fixes the upper Y-axis limit. In group mode the negative axis remains automatic to show signed interference.</p>
+        <b>Vertical intensity scale</b>
+        <p>Automatic by default. Enter an optional lower or upper Y limit in Advanced spectrum settings to adjust the visible intensity range; negative interference remains visible when bounds are automatic.</p>
       </div>
       <div class="field">
         <b>Line width (FWHM, Hz)</b>
@@ -195,7 +195,7 @@
     <p><b>Calculate spectrum</b> automatically chooses between full
     Hamiltonian diagonalization and fast plotting from saved transition
     frequencies, strengths and invariant DC contributions. Changing FWHM,
-    X bounds, graph heights or displayed spin windows needs only plotting;
+    X or Y bounds, or displayed spin windows needs only plotting;
     changing magnetic field, gyromagnetic ratios, chemical shifts,
     J-couplings or observer-group assignments triggers a full calculation.
     This also applies after opening a modified <code>.set</code> file,
@@ -242,9 +242,9 @@
       <tbody>
         <tr><td><b>External field</b> and <b>enter as ¹H frequency (MHz)</b></td><td>Normally enter B in mT. With the checkbox selected, enter the nominal proton Larmor frequency in MHz; the browser converts it to B using <code>gamma_H = 42.57747892 MHz/T</code>. The calculation and saved <code>.set</code> file use mT.</td></tr>
         <tr><td><b>Displayed spin numbers</b></td><td>Zero-based indices select local reference windows, not which spins enter the Hamiltonian. In the web interface, group mode automatically uses one representative spin (the first spin by index) from each nonempty observer group for its display windows. This is independent of the list typed into <b>Displayed spin numbers</b>; ordinary mode keeps that list unchanged. The underlying Hamiltonian always includes every spin.</td></tr>
-        <tr><td><b>Graph heights</b></td><td>Enter one value per displayed spin; <code>0</code> means automatic vertical scale. A positive value sets the upper Y-axis limit, which can clip strong peaks. In grouped spectra the negative extent is automatic unless a lower bound is explicitly specified.</td></tr>
+        <tr><td><b>Graph heights</b></td><td>No longer needs a separate input. The interface writes automatic height values (<code>0</code> per displayed panel) into old-format <code>.set</code> files. When opening older files, positive manual heights are transferred to the upper Y-boundary control.</td></tr>
         <tr><td><b>Line width (FWHM, Hz)</b></td><td>Enter a single positive number, such as <code>1</code>. The interface writes <code>1 0</code> to the legacy width line in saved <code>.set</code> files, so horizontal scaling is automatic unless explicit X limits are supplied. Opening an older file with a fixed nonzero half-width converts that width into explicit left/right X limits. All computed transition frequencies and strengths remain unchanged.</td></tr>
-        <tr><td><b>Advanced spectrum settings</b></td><td>FWHM, fixed graph heights and manual X/Y bounds are hidden inside a collapsible advanced section. Default widths and limits remain automatic.</td></tr>
+        <tr><td><b>Advanced spectrum settings</b></td><td>Contains a single positive FWHM value and independent optional X/Y boundaries. Blank boundaries request automatic scaling. No separate spectrum half-width or Graph heights field is needed.</td></tr>
         <tr><td><b>Independent Y boundaries</b></td><td>Enter a lower or upper relative-intensity limit, including negative values. A single value applies to every plotted spin; a space-separated list assigns limits in display order. For example <code>Lower = -0.5</code> and <code>Upper = 0.2</code> magnifies weak group intensities and large negative interference. Leave either side empty for automatic scaling.</td></tr>
         <tr><td><b>Spectrum X boundaries</b></td><td>Optional independent limits relative to each panel's reference frequency, in Hz. Leave a field empty for automatic selection. For example, <code>Left = 0</code>, <code>Right = 120</code> shows 0–120 Hz in every panel. The <b>Show right side only</b> checkbox enters the left boundary 0; unchecking restores automatic left selection. Explicit bounds override the automatic or symmetric graph width.</td></tr>
         <tr><td><b>Advanced: edit group IDs</b></td><td>Provide exactly one group ID per spin (0–9), e.g. <code>0 0 0 1 1 2</code>. Manual assignments are preserved while editing until <b>Auto-detect groups</b> is selected.</td></tr>
