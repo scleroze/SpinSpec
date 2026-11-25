@@ -425,10 +425,14 @@
         <a href="/tr" lang="tr" title="Türkçe yazılım tanıtımı">TR</a>
         <span style="color:#94a3b8" aria-hidden="true">|</span>
         <a href="/tutorial" title="Illustrated guide in English">Tutorial</a>
+        <a href="/changes" title="Version history and release notes">What's New</a>
         <span aria-hidden="true">|</span>
         <a href="#feedbackText" id="contactFeedbackLink">Contact / Feedback</a>
       </nav>
-      <h1 style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#1c3558">Spin<span style="color:#2563eb">Spec</span></h1>
+      <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap">
+        <h1 style="font-family:Arial,Helvetica,sans-serif;font-size:24px;font-weight:800;letter-spacing:-0.6px;color:#1c3558">Spin<span style="color:#2563eb">Spec</span></h1>
+        <a href="/changes" aria-label="SpinSpec version 1.2.0, release history" style="font-size:13px;font-weight:700;color:#475569;text-decoration:none">v1.2.0</a>
+      </div>
       <p class="subtitle">Hamiltonian-based NMR spectrum modeling</p>
       
       <form id="nmrForm" class="form-grid">
@@ -531,8 +535,10 @@
           </div>
           <div class="hint">
             A separate Gnuplot image shows total, group contributions and signed
-            interference. Zero-frequency terms remain in the CSV. Intensities
-            are relative, not experimentally calibrated.
+            interference. Frequency windows automatically zoom to significant
+            group transitions (the entered spectrum width remains the maximum).
+            Zero-frequency terms remain in the CSV. Intensities are relative,
+            not experimentally calibrated.
           </div>
         </div>
 
