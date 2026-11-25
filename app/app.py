@@ -50,6 +50,7 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 
 calc_lock = threading.Lock()
 request_times = defaultdict(lambda: deque())
+replot_request_times = defaultdict(lambda: deque())
 
 logging.basicConfig(
     level=logging.INFO,
@@ -553,6 +554,18 @@ def check_rate_limit(ip: str) -> None:
 
     q.append(now)
 
+def check_replot_rate_limit(ip: str) -> None:
+    # Plot-only requests should not inherit the 5-second delay from full
+    # diagonalizations, but still have a separate abuse-protection quota.
+    now = time.time()
+    recent = replot_request_times[ip]
+    while recent and now - recent[0] > 60:
+        recent.popleft()
+    if (recent and now - recent[-1] < 0.75) or len(recent) >= 30:
+        raise HTTPException(status_code=429, detail="Too many replot requests.")
+    recent.append(now)
+
+
 def geoip_lookup(ip: str) -> dict:
     if ip in GEOIP_CACHE:
         return GEOIP_CACHE[ip]
@@ -666,7 +679,7 @@ def replot(payload: ReplotRequest, request: Request) -> JobResult:
     """Refresh display curves from saved transitions. Never invoke engine_matrix."""
     ip = get_client_ip(request)
     validate_payload(payload)
-    check_rate_limit(ip)
+    check_replot_rate_limit(ip)
 
     if not re.fullmatch(r"[0-9a-f]{12}", payload.source_job_id):
         raise HTTPException(status_code=400, detail="Invalid source job ID.")
