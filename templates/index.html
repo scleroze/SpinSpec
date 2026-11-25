@@ -507,6 +507,23 @@
           <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
         </div>
 
+        <div class="field">
+          <label>Spectrum X boundaries (offset Hz; optional)</label>
+          <div style="display:flex;gap:8px">
+            <input id="xLeft" name="xLeft" type="number" step="any"
+                   placeholder="Left (auto)" aria-label="Left frequency boundary" />
+            <input id="xRight" name="xRight" type="number" step="any"
+                   placeholder="Right (auto)" aria-label="Right frequency boundary" />
+          </div>
+          <label class="check-row">
+            <input id="rightSideOnly" type="checkbox" />
+            Show right side only (left = 0 Hz)
+          </label>
+          <div class="hint">Empty boundaries are automatic. In zero field the
+            automatic left boundary is 0 Hz; positive spectrum half-widths
+            keep their fixed scale unless a boundary is explicitly set.</div>
+        </div>
+
         <div class="field" id="spinGroupField">
           <label>Group-resolved spectrum (optional)</label>
           <label class="check-row spin-group-toggle">
@@ -688,6 +705,17 @@
   <script>
     const statusEl = document.getElementById('status');
     const metaEl = document.getElementById('meta');
+    const xLeftInput = document.getElementById('xLeft');
+    const xRightInput = document.getElementById('xRight');
+    const rightSideOnly = document.getElementById('rightSideOnly');
+    rightSideOnly.addEventListener('change', () => {
+      if (rightSideOnly.checked) xLeftInput.value = '0';
+      else if (xLeftInput.value.trim() === '0') xLeftInput.value = '';
+    });
+    xLeftInput.addEventListener('input', () => {
+      rightSideOnly.checked = xLeftInput.value.trim() === '0';
+    });
+
     const openSetInput = document.getElementById('openSetInput');
     const saveSetBtn = document.getElementById('saveSetBtn');
     const calculateBtn = document.getElementById('calculateBtn');
@@ -770,6 +798,8 @@
         graph: document.getElementById('graph').value.trim(),
         heights: document.getElementById('heights').value.trim(),
         linewidths: document.getElementById('linewidths').value.trim(),
+        x_left: document.getElementById('xLeft').value.trim(),
+        x_right: document.getElementById('xRight').value.trim(),
         observer_groups: getSelectedObserverGroups(),
       };
     }
@@ -788,6 +818,9 @@
         `Graph ${data.graph}`,
         data.heights,
         data.linewidths,
+        ...(data.x_left || data.x_right
+            ? [`XRange ${data.x_left || 'auto'} ${data.x_right || 'auto'}`]
+            : []),
         ''
       ].join('\n');
     }
@@ -834,6 +867,14 @@
         document.getElementById('graph').value = (lines[i] || '').replace(/^Graph\s+/, '');
         document.getElementById('heights').value = lines[i + 1] ?? '';
         document.getElementById('linewidths').value = lines[i + 2] ?? '';
+        const tail = (lines[i + 3] || '').trim();
+        const match = /^XRange\s+(\S+)\s+(\S+)$/.exec(tail);
+        document.getElementById('xLeft').value =
+          match && match[1] !== 'auto' ? match[1] : '';
+        document.getElementById('xRight').value =
+          match && match[2] !== 'auto' ? match[2] : '';
+        document.getElementById('rightSideOnly').checked =
+          document.getElementById('xLeft').value === '0';
       }
       proposeSpinGroups();
     }
