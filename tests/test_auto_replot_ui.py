@@ -39,6 +39,13 @@ assert "fillFormFromSet(text);" in page
 assert 'id="lineWidth"' in page
 assert 'id="linewidths"' not in page
 assert 'id="heights"' not in page
+assert 'id="lineWidth" name="lineWidth" type="text" inputmode="decimal"' in page
+assert 'id="xLeft" name="xLeft" type="text" inputmode="decimal"' in page
+assert 'id="xRight" name="xRight" type="text" inputmode="decimal"' in page
+assert "function normalizeDecimalToken(token, label)" in page
+assert "function normalizeNumericList(raw, label, allowAuto = false)" in page
+assert "function normalizeCouplingRows(raw)" in page
+
 assert "heights: automaticGraphHeights()" in page
 assert "legacyHeights.map(v => Number(v) > 0 ? v : 'auto').join(' ')" in page
 assert "linewidths: getLinewidthsForEngine()" in page
@@ -90,4 +97,42 @@ with tempfile.NamedTemporaryFile(mode="w", suffix=".js") as source_file:
     got = [json.loads(line) for line in result.stdout.splitlines()]
     assert got == [expected for _, _, expected in cases], got
 
-print("PASS: one FWHM input, automatic blank X limits, .set backward compatibility")
+
+# Verify the executed JS normalizer (decimal comma, exponent and lists).
+normalize_start=source.index("    const decimalPattern =")
+normalize_end=source.index("    function automaticGraphHeights()",normalize_start)
+normalize_js=source[normalize_start:normalize_end]
+checks=[
+    ("normalizeDecimalToken('0,25','FWHM')", "0.25"),
+    ("normalizeDecimalToken('-1.2e-3','X')", "-1.2e-3"),
+    ("normalizeNumericList('42,577 17,235','gammas')", "42.577 17.235"),
+    ("normalizeNumericList('42.577 17.235','gammas')", "42.577 17.235"),
+    ("normalizeNumericList('42.577,17.235','gammas')", "42.577 17.235"),
+    ("normalizeNumericList('0, 1, 2','spins')", "0 1 2"),
+    ("normalizeNumericList('-0,25 0,5','Y')", "-0.25 0.5"),
+    ("normalizeNumericList('auto -0,25','Y',true)", "auto -0.25"),
+    ("normalizeCouplingRows('0 1 10,5\\n1 2 -0,25')",
+     "0 1 10.5\n1 2 -0.25"),
+]
+node_js=normalize_js+"\n"+"console.log(JSON.stringify(["+",".join(
+    expression for expression,_ in checks
+)+"]));"
+with tempfile.NamedTemporaryFile(mode="w",suffix=".js") as js:
+    js.write(node_js)
+    js.flush()
+    result=subprocess.run(["node",js.name],text=True,capture_output=True)
+    assert result.returncode==0,result.stderr
+    assert json.loads(result.stdout)==[expected for _,expected in checks]
+
+for expression in ("normalizeDecimalToken('2,3,4','X')",
+                   "normalizeNumericList('42,577,17,235','gammas')",
+                   "normalizeCouplingRows('0 1 2,3,4')"):
+    with tempfile.NamedTemporaryFile(mode="w",suffix=".js") as js:
+        js.write(normalize_js+"\ntry {"+expression+
+                 ";process.exit(2)}catch(e){process.exit(0)}")
+        js.flush()
+        result=subprocess.run(["node",js.name],capture_output=True,text=True)
+        assert result.returncode==0,(expression,result.stderr)
+
+print("PASS: separate FWHM, legacy .set, decimal comma/dot and ambiguous-input rejection")
+
