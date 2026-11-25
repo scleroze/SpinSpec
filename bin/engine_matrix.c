@@ -642,6 +642,23 @@ for (int i = 0; i < StatesNumber; i++) {
     }
     const double observer_energy_tolerance =
         fmax(1e-10, 64.0 * DBL_EPSILON * max_abs_energy);
+    /* The replot utility must use the identical energy-block cutoff, so
+     * sub-tolerance transitions remain in the invariant DC contribution. */
+    {
+        char tolerance_file[64];
+        snprintf(tolerance_file, sizeof(tolerance_file),
+                 "Sp_tolerance_%05d.dat", Bc);
+        FILE *saved_tolerance = fopen(tolerance_file, "w");
+        if (!saved_tolerance) {
+            perror(tolerance_file);
+            return EXIT_FAILURE;
+        }
+        fprintf(saved_tolerance, "%.17g\n", observer_energy_tolerance);
+        if (fclose(saved_tolerance) != 0) {
+            perror(tolerance_file);
+            return EXIT_FAILURE;
+        }
+    }
     double observer_total_power = 0.0;
     for (int spin = 0; spin < S; ++spin) {
         const double weight = G[spin] / SS_OBS_GAMMA_REF_HZ_PER_MT;
