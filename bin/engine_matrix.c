@@ -28,6 +28,7 @@
 #include <spawn.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <unistd.h>  /* access(), X_OK */
 extern char **environ;
 #define MAX_LINE_LENGTH 1024
 #define MAX_WORD_LENGTH 256
@@ -63,6 +64,39 @@ int read_line_or_exit(FILE *file, char *line, size_t line_size) {
 
 
 /* Sort transition pairs by frequency. */
+/* Apply optional per-Graph-panel YRange values to the common renderer.
+ * A single number applies to all displayed panels; auto removes the bound. */
+static int ss_apply_y_limits(const char *name, const char *spec,
+                             const int *spins, int count)
+{
+    if(!spec || !*spec) return 0;
+    char input[512];
+    if(strlen(spec)>=sizeof(input)) return -1;
+    strcpy(input,spec);
+    char *values[128],*save=NULL;
+    int n=0;
+    for(char *p=strtok_r(input,",",&save);p;
+        p=strtok_r(NULL,",",&save)){
+        if(n>=128)return -1;
+        values[n++]=p;
+    }
+    if(n!=1 && n!=count)return -1;
+    char output[2048]={0};
+    size_t length=0;
+    for(int i=0;i<count;i++){
+        const char *raw=values[n==1?0:i];
+        if(strcmp(raw,"auto")==0)continue;
+        char *tail=NULL;
+        double v=strtod(raw,&tail);
+        if(tail==raw || *tail || !isfinite(v))return -1;
+        int written=snprintf(output+length,sizeof(output)-length,
+            "%s%d:%.17g",length?",":"",spins[i],v);
+        if(written<0 || (size_t)written>=sizeof(output)-length)return -1;
+        length+=(size_t)written;
+    }
+    return setenv(name,output,1)==0 ? 0 : -1;
+}
+
 static int ss_compare_frequency(const void *a, const void *b)
 {
     const double fa = ((const double *)a)[0];
@@ -347,6 +381,7 @@ int main(int argc, char *argv[]) {
  */
 double fwhm_hz, WidthLine, WidthSpectrum;
 double x_left_override = NAN, x_right_override = NAN;
+char y_min_requested[512]={0}, y_max_requested[512]={0};
 if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
     !isfinite(fwhm_hz) || fwhm_hz <= 0.0 ||
     !isfinite(WidthSpectrum) || WidthSpectrum < 0.0) {
@@ -363,6 +398,14 @@ if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
             char left_token[128], right_token[128], extra;
             char *p = skip_spaces(trailing);
             if (*p == '\0' || *p == '\n' || *p == '#') continue;
+            if (strncmp(p, "YRange ", 7) == 0) {
+                if(sscanf(p,"YRange %511s %511s %c",
+                          y_min_requested,y_max_requested,&extra)!=2){
+                    fprintf(stderr,"Invalid optional YRange record.\n");
+                    fclose(file);return EXIT_FAILURE;
+                }
+                continue;
+            }
             if (sscanf(p, "XRange %127s %127s %c",
                        left_token, right_token, &extra) != 2) {
                 fprintf(stderr, "Invalid optional XRange record.\n");
@@ -393,11 +436,16 @@ if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
                 fclose(file);
                 return EXIT_FAILURE;
             }
-            break;
+            /* Continue reading so XRange and YRange can coexist. */
         }
     }
 }
    fclose(file);
+if(ss_apply_y_limits("SPINSPEC_Y_MIN",y_min_requested,Sgm,Sg)!=0 ||
+   ss_apply_y_limits("SPINSPEC_Y_MAX",y_max_requested,Sgm,Sg)!=0){
+    fprintf(stderr,"Invalid YRange: one value or one per Graph panel expected.\n");
+    return EXIT_FAILURE;
+}
 double gamma = fwhm_hz / 2.0;
 WidthLine = gamma * gamma;
 /*
@@ -1332,6 +1380,53 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
 
     /* Pass argv directly; .set filenames may contain spaces, parentheses
      * or other shell metacharacters.  No shell interpretation is needed. */
+    /* Unified Gnuplot executable handles ordinary and optional group
+     * displays in one invocation. The legacy graph launcher is retained
+     * as a compatibility fallback for old standalone installations. */
+    if (access("./group_graph", X_OK) == 0) {
+        char frame_s[32], fwhm_s[64], width_s[64];
+        snprintf(frame_s, sizeof(frame_s), "%d", Bc);
+        snprintf(fwhm_s, sizeof(fwhm_s), "%.17g", fwhm_hz);
+        snprintf(width_s, sizeof(width_s), "%.17g", WidthSpectrum);
+        if(setenv("SPINSPEC_MODEL_FILE",Mfile,1)!=0) {
+            perror("SPINSPEC_MODEL_FILE");return EXIT_FAILURE;
+        }
+        char heights_spec[4096]={0};
+        size_t length=0;
+        for(int h=0;h<Sg;h++){
+            int written=snprintf(heights_spec+length,sizeof(heights_spec)-length,
+                "%s%d:%.17g",h?",":"",Sgm[h],V_size[h]);
+            if(written<0||(size_t)written>=sizeof(heights_spec)-length)
+                return EXIT_FAILURE;
+            length+=(size_t)written;
+        }
+        setenv("SPINSPEC_GRAPH_HEIGHTS",heights_spec,1);
+        char xl[64],xr[64];
+        if(isfinite(x_left_override))snprintf(xl,sizeof(xl),"%.17g",x_left_override);
+        else strcpy(xl,"auto");
+        if(isfinite(x_right_override))snprintf(xr,sizeof(xr),"%.17g",x_right_override);
+        else strcpy(xr,"auto");
+        setenv("SPINSPEC_X_LEFT",xl,1);
+        setenv("SPINSPEC_X_RIGHT",xr,1);
+        char *args[]={"./group_graph",frame_s,fwhm_s,width_s,NULL};
+        pid_t pid;
+        int err=posix_spawn(&pid,"./group_graph",NULL,NULL,args,environ);
+        if(err!=0){
+            fprintf(stderr,"Cannot start unified graph: %s\n",strerror(err));
+            return EXIT_FAILURE;
+        }
+        int status=0;
+        pid_t done;
+        do {done=waitpid(pid,&status,0);} while(done<0&&errno==EINTR);
+        unsetenv("SPINSPEC_MODEL_FILE");
+        unsetenv("SPINSPEC_GRAPH_HEIGHTS");
+        unsetenv("SPINSPEC_X_LEFT");
+        unsetenv("SPINSPEC_X_RIGHT");
+        if(done<0||!WIFEXITED(status)||WEXITSTATUS(status)!=0){
+            fprintf(stderr,"Unified graph failed (status=%d)\n",status);
+            return EXIT_FAILURE;
+        }
+    } else {
     char command[256];
     char graph_frame[32];
     snprintf(graph_frame, sizeof(graph_frame), "%d", Bc);
@@ -1405,6 +1500,7 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
               }
           }
           
+	     } /* end legacy compatibility fallback */
 	 printf("Cycle\n");
     B0 = B0 + BS;
     Bc++; 

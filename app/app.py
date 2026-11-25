@@ -81,6 +81,8 @@ class SpectrumRequest(BaseModel):
     linewidths: str = ""
     x_left: str = ""
     x_right: str = ""
+    y_min: str = ""
+    y_max: str = ""
     observer_groups: str = ""
     example_name: str = ""
     example_modified: bool = False
@@ -88,7 +90,7 @@ class SpectrumRequest(BaseModel):
     @field_validator(
         "title", "gammas", "shifts", "field",
         "jcouplings", "graph", "heights", "linewidths", "x_left", "x_right",
-        "observer_groups"
+        "y_min", "y_max", "observer_groups"
     )
     @classmethod
     def strip_text(cls, value: str) -> str:
@@ -292,6 +294,37 @@ def validate_payload(payload: SpectrumRequest) -> None:
     if bounds[0] is not None and bounds[1] is not None and bounds[0] >= bounds[1]:
         raise HTTPException(status_code=400, detail="Left X boundary must be less than right X boundary.")
 
+    # Independent intensity limits; one per displayed spin or one shared.
+    try:
+        axes = observer_group_graph_layout(payload)[0].split()
+    except (ValueError, IndexError):
+        raise HTTPException(status_code=400, detail="Invalid observer-group assignment.")
+    y_values = []
+    for field, name in ((payload.y_min, "lower"), (payload.y_max, "upper")):
+        values = field.replace(",", " ").split()
+        if len(values) not in (0, 1, len(axes)):
+            raise HTTPException(status_code=400,
+                                detail=f"Expected one or {len(axes)} {name} Y limits.")
+        normalized = values * len(axes) if len(values) == 1 else values
+        parsed = []
+        for token in normalized:
+            if token.lower() == "auto":
+                parsed.append(None)
+            else:
+                try:
+                    number = float(token)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail=f"Invalid {name} Y limit.")
+                if not math.isfinite(number):
+                    raise HTTPException(status_code=400, detail=f"Invalid {name} Y limit.")
+                parsed.append(number)
+        y_values.append(parsed)
+    if y_values[0] and y_values[1]:
+        for lower, upper in zip(*y_values):
+            if lower is not None and upper is not None and lower >= upper:
+                raise HTTPException(status_code=400,
+                                    detail="Each lower Y boundary must be less than the upper Y boundary.")
+
     if payload.observer_groups:
         items = payload.observer_groups.replace(",", " ").split()
         if len(items) != spin_count or any(
@@ -373,6 +406,10 @@ def build_set_content(payload: SpectrumRequest) -> str:
     # Empty bounds are automatic, supplied values are offset-Hz limits.
     if payload.x_left or payload.x_right:
         records.append(f"XRange {payload.x_left or 'auto'} {payload.x_right or 'auto'}")
+    if payload.y_min or payload.y_max:
+        ymin = ','.join(payload.y_min.replace(',', ' ').split()) or 'auto'
+        ymax = ','.join(payload.y_max.replace(',', ' ').split()) or 'auto'
+        records.append(f"YRange {ymin} {ymax}")
     records.append("")
     return "\n".join(records)
 
@@ -426,15 +463,36 @@ def make_group_graph_symlink(job_dir: Path) -> None:
         link_path.symlink_to(GROUP_GRAPH_BIN)
 
 
-def observer_environment(payload: SpectrumRequest) -> Optional[dict]:
-    if not payload.observer_groups:
-        return None
+def plot_environment(payload: SpectrumRequest) -> dict:
+    """Display settings forwarded consistently to both C plotting paths."""
     env = os.environ.copy()
-    env["SPINSPEC_OBSERVER_GROUPS"] = ",".join(
-        payload.observer_groups.replace(",", " ").split()
-    )
-    env["OMP_NUM_THREADS"] = "1"
+    if payload.observer_groups:
+        env["SPINSPEC_OBSERVER_GROUPS"] = ",".join(
+            payload.observer_groups.replace(",", " ").split()
+        )
+        env["OMP_NUM_THREADS"] = "1"
+
+    graph, _ = observer_group_graph_layout(payload)
+    spins = [int(v) for v in graph.split()]
+    for field, env_name in (
+        (payload.y_min, "SPINSPEC_Y_MIN"),
+        (payload.y_max, "SPINSPEC_Y_MAX"),
+    ):
+        values = field.replace(",", " ").split()
+        if len(values) == 1:
+            values *= len(spins)
+        if values:
+            env[env_name] = ",".join(
+                f"{spin}:{value}" for spin, value in zip(spins, values)
+                if value.lower() != "auto"
+            )
+        else:
+            env.pop(env_name, None)
     return env
+
+
+def observer_environment(payload: SpectrumRequest) -> Optional[dict]:
+    return plot_environment(payload)
 
 
 # SPINSPEC_CSV_EXPORT_V1
@@ -543,13 +601,13 @@ def check_rate_limit(ip: str) -> None:
     if q and now - q[-1] < MIN_SECONDS_BETWEEN_REQUESTS:
         raise HTTPException(
             status_code=429,
-            detail=f"Слишком частые запросы. Подождите {MIN_SECONDS_BETWEEN_REQUESTS} секунд.",
+            detail=f"Requests are too frequent. Please wait {MIN_SECONDS_BETWEEN_REQUESTS} seconds before trying again.",
         )
 
     if len(q) >= MAX_REQUESTS_PER_MINUTE:
         raise HTTPException(
             status_code=429,
-            detail="Слишком много запросов за минуту. Попробуйте позже.",
+            detail="Too many calculations in one minute. Please try again later.",
         )
 
     q.append(now)
@@ -625,9 +683,10 @@ def calculate(payload: SpectrumRequest, request: Request) -> JobResult:
 
     try:
         set_path = write_set_file(job_dir, payload)
-        make_graph_symlink(job_dir)
-        if payload.observer_groups:
-            make_group_graph_symlink(job_dir)
+        make_graph_symlink(job_dir)  # Legacy CLI compatibility.
+        # The engine uses group_graph as the unified renderer whenever
+        # it is present, even when no observer groups were requested.
+        make_group_graph_symlink(job_dir)
 
         process = run_command([str(ENGINE_BIN), set_path.name], cwd=job_dir,
                               env=observer_environment(payload))
@@ -744,9 +803,8 @@ def replot(payload: ReplotRequest, request: Request) -> JobResult:
         for name in required:
             shutil.copy2(source / name, job_dir / name)
         write_set_file(job_dir, payload)
-        make_graph_symlink(job_dir)
-        if payload.observer_groups:
-            make_group_graph_symlink(job_dir)
+        make_graph_symlink(job_dir)  # Legacy CLI compatibility.
+        make_group_graph_symlink(job_dir)
 
         # NaN in the helper config means automatic left/right limit.
         left = payload.x_left if payload.x_left else "nan"
@@ -760,29 +818,28 @@ def replot(payload: ReplotRequest, request: Request) -> JobResult:
         (job_dir / "plot_params.dat").write_text(
             "\n".join(params) + "\n", encoding="utf-8",
         )
+        env = plot_environment(payload)
         process = run_command([str(REPLOT_BIN), "plot_params.dat"], cwd=job_dir)
         if process.returncode:
             raise failed_process_response(process, "replot_spectrum")
-        process = run_command([str(GRAPH_BIN), "input.set", "0"], cwd=job_dir)
+        # The unified group_graph executable renders the ordinary JPEG and,
+        # when observer groups exist, adds the group+interference JPEG.
+        graph, group_heights = observer_group_graph_layout(payload)
+        spin_numbers = [int(v) for v in graph.split()]
+        heights_spec = ",".join(
+            f"{spin}:{height}" for spin, height in
+            zip(spin_numbers, group_heights.split())
+        )
+        env["SPINSPEC_MODEL_FILE"] = "input.set"
+        env["SPINSPEC_GRAPH_HEIGHTS"] = heights_spec
+        env["SPINSPEC_X_LEFT"] = left if left != "nan" else "auto"
+        env["SPINSPEC_X_RIGHT"] = right if right != "nan" else "auto"
+        process = run_command(
+            [str(GROUP_GRAPH_BIN), "0", f"{fwhm:.17g}", f"{width:.17g}"],
+            cwd=job_dir, env=env,
+        )
         if process.returncode:
-            raise failed_process_response(process, "matrix_graph")
-
-        if payload.observer_groups:
-            spin_numbers = [int(v) for v in graph.split()]
-            heights = observer_group_graph_layout(payload)[1].split()
-            heights_spec = ",".join(
-                f"{spin}:{height}" for spin, height in zip(spin_numbers, heights)
-            )
-            env = observer_environment(payload) or os.environ.copy()
-            env["SPINSPEC_GRAPH_HEIGHTS"] = heights_spec
-            env["SPINSPEC_X_LEFT"] = left if left != "nan" else "auto"
-            env["SPINSPEC_X_RIGHT"] = right if right != "nan" else "auto"
-            process = run_command(
-                [str(GROUP_GRAPH_BIN), "0", f"{fwhm:.17g}", f"{width:.17g}"],
-                cwd=job_dir, env=env,
-            )
-            if process.returncode:
-                raise failed_process_response(process, "group_graph")
+            raise failed_process_response(process, "unified_group_graph")
 
         response = build_response(job_dir, "Spectrum redrawn without diagonalization.")
         if not response.image_url or (payload.observer_groups and

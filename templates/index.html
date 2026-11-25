@@ -193,6 +193,36 @@
     .status.error {
       color: var(--danger);
     }
+    .advanced-spectrum-settings {
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      margin: 5px 0 13px;
+    }
+    .advanced-spectrum-settings summary {
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .advanced-spectrum-settings .field { margin-top: 10px; }
+    .preview-alert {
+      display: none;
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      right: 12px;
+      z-index: 5;
+      margin: 0;
+      padding: 12px 14px;
+      border: 1px solid #fca5a5;
+      border-radius: 9px;
+      background: #fff1f2;
+      color: #991b1b;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    .preview-alert.visible { display: block; }
 
     .status.ok {
       color: #166534;
@@ -497,32 +527,46 @@
           <input id="graph" name="graph" type="text" placeholder="For example: 0 3 5" />
         </div>
 
-        <div class="field">
-          <label for="heights">Graph heights</label>
-          <input id="heights" name="heights" type="text" placeholder="For example: 1.0" />
-        </div>
-
-        <div class="field">
-          <label for="linewidths">Line width (FWHM) and spectrum half-width (Hz; 0 = auto)</label>
-          <input id="linewidths" name="linewidths" type="text" placeholder="For example: 0.2 20" />
-        </div>
-
-        <div class="field">
-          <label>Spectrum X boundaries (offset Hz; optional)</label>
-          <div style="display:flex;gap:8px">
-            <input id="xLeft" name="xLeft" type="number" step="any"
-                   placeholder="Left (auto)" aria-label="Left frequency boundary" />
-            <input id="xRight" name="xRight" type="number" step="any"
-                   placeholder="Right (auto)" aria-label="Right frequency boundary" />
+        <details class="advanced-spectrum-settings" id="advancedSpectrumSettings">
+          <summary>Advanced spectrum settings (linewidth and plot axes)</summary>
+          <div class="field">
+            <label for="lineWidth">Line width (FWHM, Hz)</label>
+            <input id="lineWidth" name="lineWidth" type="text" inputmode="decimal"
+                   value="0.5" placeholder="For example: 0.5 or 0,5" />
+            <div class="hint">Positive line width. Both decimal point and decimal comma
+              are accepted (0.5 or 0,5). The frequency window is automatic
+              unless you enter X boundaries below.</div>
           </div>
-          <label class="check-row">
-            <input id="rightSideOnly" type="checkbox" />
-            Show right side only (left = 0 Hz)
-          </label>
-          <div class="hint">Empty boundaries are automatic. In zero field the
-            automatic left boundary is 0 Hz; positive spectrum half-widths
-            keep their fixed scale unless a boundary is explicitly set.</div>
-        </div>
+          <div class="field">
+            <label>Spectrum X boundaries (frequency offset, Hz; optional)</label>
+            <div style="display:flex;gap:8px">
+              <input id="xLeft" name="xLeft" type="text" inputmode="decimal"
+                     placeholder="Left (auto)" aria-label="Left frequency boundary" />
+              <input id="xRight" name="xRight" type="text" inputmode="decimal"
+                     placeholder="Right (auto)" aria-label="Right frequency boundary" />
+            </div>
+            <label class="check-row">
+              <input id="rightSideOnly" type="checkbox" />
+              Show right side only (left = 0 Hz)
+            </label>
+            <div class="hint">Leave both limits empty for automatic scaling
+              (legacy spectrum half-width = 0). Enter either boundary to
+              override just that side; both 0.25 and 0,25 are accepted.</div>
+          </div>
+          <div class="field">
+            <label>Independent Y limits (relative intensity)</label>
+            <div style="display:flex;gap:8px">
+              <input id="yMin" name="yMin" type="text" placeholder="Lower: auto or -0.5 -1"
+                     aria-label="Lower intensity bounds" />
+              <input id="yMax" name="yMax" type="text" placeholder="Upper: auto or 0.1 2"
+                     aria-label="Upper intensity bounds" />
+            </div>
+            <div class="hint">One value applies to all displayed panels; multiple values are
+              separated by spaces and follow the displayed-spin order. Both
+              decimal separators are accepted (for example, -0,25 0,5).
+              Leave blank for automatic scaling. Negative Y is allowed.</div>
+          </div>
+        </details>
 
         <div class="field" id="spinGroupField">
           <label>Group-resolved spectrum (optional)</label>
@@ -552,10 +596,10 @@
           </div>
           <div class="hint">
             A separate Gnuplot image shows total, group contributions and signed
-            interference. Enter 0 as the spectrum half-width to fit each
-            displayed frequency window automatically; positive values keep
-            the exact manual half-width. Zero-frequency terms remain in the
-            CSV. Intensities are relative, not experimentally calibrated.
+            interference. Spectrum windows are fitted automatically unless
+            you enter explicit X boundaries under Advanced spectrum settings.
+            Zero-frequency terms remain in the CSV. Intensities are relative,
+            not experimentally calibrated.
           </div>
         </div>
 
@@ -599,6 +643,7 @@
    
 
 <div class="preview-box">
+  <div id="previewAlert" class="preview-alert" role="alert" aria-live="assertive"></div>
   <div id="resultMessage" class="result-message"></div>
 
   <div class="preview-toolbar">
@@ -741,8 +786,8 @@
 
       interactiveButton.style.display = "inline-block";
       interactiveButton.onclick = () => {
-        const linewidths = document.getElementById("linewidths").value.trim();
-        const lineWidth = linewidths.split(/\s+/)[0] || "0.05";
+        const rawLineWidth = document.getElementById("lineWidth").value.trim() || "0.5";
+        const lineWidth = normalizeDecimalToken(rawLineWidth, 'Line width (FWHM)');
 
         window.open(
           `/dev-spectrum?job=${result.job_id}&linewidth=${encodeURIComponent(lineWidth)}`,
@@ -785,6 +830,20 @@
     function setStatus(message, type = '') {
       statusEl.textContent = message;
       statusEl.className = `status ${type}`.trim();
+      const alert = document.getElementById('previewAlert');
+      if (type === 'error') {
+        // Errors appear where users expect the spectrum, not only below the form.
+        const rateLimited = /HTTP 429/.test(message);
+        alert.textContent = rateLimited
+          ? 'Too many requests. Please wait a few seconds before calculating again.'
+          : message.replace(/^Error (calculating spectrum|loading example): /, '').slice(0, 300);
+        alert.classList.add('visible');
+        const panel = document.querySelector('.right-panel');
+        if (panel) panel.scrollTo({top: 0, behavior: 'smooth'});
+      } else {
+        alert.textContent = '';
+        alert.classList.remove('visible');
+      }
     }
 
     function showMessage(text, isError = false) {
@@ -793,18 +852,111 @@
       el.style.color = isError ? "red" : "black";
     }
 
+    // Locale-independent numeric input. The browser accepts both decimal
+    // separators, while the C engine and .set files always receive dots.
+    // Lists are separated with whitespace, never with ambiguous digit commas.
+    const decimalPattern =
+      /^[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?$/;
+
+    function normalizeDecimalToken(token, label) {
+      const value = token.trim();
+      if (!decimalPattern.test(value))
+        throw new Error(`Invalid ${label}: "${value}". Use 0.25 or 0,25.`);
+      const canonical = value.replace(',', '.');
+      if (!Number.isFinite(Number(canonical)))
+        throw new Error(`Invalid ${label}: the number must be finite.`);
+      return canonical;
+    }
+
+    function normalizeNumericList(raw, label, allowAuto = false) {
+      const text = raw.replace(/\r/g, '').trim();
+      if (!text) return '';
+      // A comma followed by whitespace is unambiguously a list delimiter.
+      // A comma between digits is decimal, e.g. 42,577 17,235.
+      const tokens = text.replace(/,\s+/g, ' ').split(/\s+/).filter(Boolean);
+      const result = [];
+      for (const token of tokens) {
+        if (allowAuto && token.toLowerCase() === 'auto') {
+          result.push('auto');
+          continue;
+        }
+        const commas = (token.match(/,/g) || []).length;
+        if (commas > 1) {
+          throw new Error(
+            `Ambiguous ${label}: "${token}". Separate numbers with spaces; ` +
+            'a comma inside a number is its decimal separator.'
+          );
+        }
+        // Keep old unambiguous lists written as 42.577,17.235.
+        const elements = commas === 1 && token.includes('.')
+          ? token.split(',')
+          : [token];
+        for (const element of elements) {
+          result.push(normalizeDecimalToken(element, label));
+        }
+      }
+      return result.join(' ');
+    }
+
+    function normalizeCouplingRows(raw) {
+      return raw.replace(/\r/g, '').split('\n').map(line => {
+        const text = line.trim();
+        if (!text) return '';
+        const values = normalizeNumericList(text, 'J-coupling row').split(/\s+/);
+        if (values.length !== 3 ||
+            !/^\d+$/.test(values[0]) || !/^\d+$/.test(values[1]))
+          throw new Error(
+            'Each J-coupling row must contain two integer spin indices and one J value.'
+          );
+        return values.join(' ');
+      }).filter(Boolean).join('\n');
+    }
+
+    function optionalDecimal(id, label) {
+      const value = document.getElementById(id).value.trim();
+      return value ? normalizeDecimalToken(value, label) : '';
+    }
+
+    function automaticGraphHeights() {
+      // Legacy .set requires one height per displayed spin. Graph height
+      // zero means automatic and is now implicit in the interface.
+      const selected = document.getElementById('graph').value.trim().split(/\s+/)
+        .filter(Boolean);
+      return selected.map(() => '0').join(' ');
+    }
+
+    function getLinewidthsForEngine() {
+      const raw = document.getElementById('lineWidth').value.trim();
+      if (!raw)
+        throw new Error('Line width (FWHM) must be a positive number in Hz.');
+      const fwhm = normalizeDecimalToken(raw, 'Line width (FWHM)');
+      if (Number(fwhm) <= 0)
+        throw new Error('Line width (FWHM) must be positive.');
+      // The legacy engine still expects two values. A zero half-width
+      // selects automatic scaling; independent X limits now control zoom.
+      return `${fwhm} 0`;
+    }
+
     function getFormData() {
+      const gammas = normalizeNumericList(
+        document.getElementById('gammas').value, 'gyromagnetic ratios');
+      const shifts = normalizeNumericList(
+        document.getElementById('shifts').value, 'chemical shifts');
+      if (gammas && shifts && gammas.split(/\s+/).length !== shifts.split(/\s+/).length)
+        throw new Error('The number of chemical shifts must equal the number of spins.');
       return {
         title: document.getElementById('title').value.trim(),
-        gammas: document.getElementById('gammas').value.trim(),
-        shifts: document.getElementById('shifts').value.trim(),
+        gammas,
+        shifts,
         field: getFieldValueForCalculation(),
-        jcouplings: document.getElementById('jcouplings').value.replace(/\r/g, '').trim(),
+        jcouplings: normalizeCouplingRows(document.getElementById('jcouplings').value),
         graph: document.getElementById('graph').value.trim(),
-        heights: document.getElementById('heights').value.trim(),
-        linewidths: document.getElementById('linewidths').value.trim(),
-        x_left: document.getElementById('xLeft').value.trim(),
-        x_right: document.getElementById('xRight').value.trim(),
+        heights: automaticGraphHeights(),
+        linewidths: getLinewidthsForEngine(),
+        x_left: optionalDecimal('xLeft', 'left X boundary'),
+        x_right: optionalDecimal('xRight', 'right X boundary'),
+        y_min: normalizeNumericList(document.getElementById('yMin').value, 'lower Y limits', true),
+        y_max: normalizeNumericList(document.getElementById('yMax').value, 'upper Y limits', true),
         observer_groups: getSelectedObserverGroups(),
       };
     }
@@ -826,6 +978,9 @@
         ...(data.x_left || data.x_right
             ? [`XRange ${data.x_left || 'auto'} ${data.x_right || 'auto'}`]
             : []),
+        ...(data.y_min || data.y_max
+            ? [`YRange ${(data.y_min || 'auto').replace(/\s+/g, ',')} ${(data.y_max || 'auto').replace(/\s+/g, ',')}`]
+            : []),
         ''
       ].join('\n');
     }
@@ -833,14 +988,51 @@
     function getFieldValueForCalculation() {
       const raw = document.getElementById("field").value.trim();
       const asFreq = document.getElementById("fieldAsProtonFrequency").checked;
+      const canonical = normalizeNumericList(raw, 'external field');
+      if (!canonical) throw new Error('External field is required.');
+      const values = canonical.split(/\s+/);
+      if (asFreq) {
+        if (values.length !== 1)
+          throw new Error('Proton frequency must be a single value in MHz.');
+        const gammaH = 42.57747892; // MHz/T
+        return String((Number(values[0]) / gammaH) * 1000.0);
+      }
+      if (values.length !== 1 && values.length !== 3)
+        throw new Error('External field requires one value or start, stop and step.');
+      return canonical;
+    }
 
-      if (!asFreq) return raw;
-
-      const nuMHz = parseFloat(raw.replace(",", "."));
-      const gammaH = 42.57747892; // MHz/T
-      const field_mT = (nuMHz / gammaH) * 1000.0;
-
-      return String(field_mT);
+    // Convert the legacy `FWHM half-width` record to the new form.
+    // A fixed old half-width becomes explicit left/right limits so opening
+    // an old .set does not change the selected spectral window.
+    function decodeSetDisplayWidth(widthLine, xRangeLine = '') {
+      const tokens = widthLine.trim().split(/\s+/);
+      if (tokens.length < 1 || tokens.length > 2 ||
+          !Number.isFinite(Number(tokens[0])) || Number(tokens[0]) <= 0)
+        throw new Error('Invalid .set line width (FWHM).');
+      const half = tokens.length === 2 ? Number(tokens[1]) : 0;
+      if (!Number.isFinite(half) || half < 0)
+        throw new Error('Invalid .set spectrum half-width.');
+      const xMatch = xRangeLine
+        ? /^XRange\s+(\S+)\s+(\S+)$/.exec(xRangeLine.trim())
+        : null;
+      if (xRangeLine && !xMatch)
+        throw new Error('Invalid .set XRange record.');
+      const parseBoundary = (token, fallback) => {
+        if (!token || token.toLowerCase() === 'auto') return fallback;
+        if (!Number.isFinite(Number(token)))
+          throw new Error('Invalid .set X boundary.');
+        return token;
+      };
+      const left = parseBoundary(
+        xMatch ? xMatch[1] : '', half > 0 ? String(-half) : ''
+      );
+      const right = parseBoundary(
+        xMatch ? xMatch[2] : '', half > 0 ? String(half) : ''
+      );
+      if (left && right && Number(left) >= Number(right))
+        throw new Error('Invalid .set XRange: left must be less than right.');
+      return { fwhm: tokens[0], left, right };
     }
 
     function fillFormFromSet(content) {
@@ -870,16 +1062,28 @@
 
       if (i < lines.length) {
         document.getElementById('graph').value = (lines[i] || '').replace(/^Graph\s+/, '');
-        document.getElementById('heights').value = lines[i + 1] ?? '';
-        document.getElementById('linewidths').value = lines[i + 2] ?? '';
-        const tail = (lines[i + 3] || '').trim();
-        const match = /^XRange\s+(\S+)\s+(\S+)$/.exec(tail);
-        document.getElementById('xLeft').value =
-          match && match[1] !== 'auto' ? match[1] : '';
-        document.getElementById('xRight').value =
-          match && match[2] !== 'auto' ? match[2] : '';
+        const legacyHeights = (lines[i + 1] || '').trim().split(/\s+/).filter(Boolean);
+        const xLine = lines.slice(i + 3)
+          .map(line => line.trim())
+          .find(line => /^XRange\s+/.test(line)) || '';
+        const display = decodeSetDisplayWidth(lines[i + 2] || '', xLine);
+        document.getElementById('lineWidth').value = display.fwhm;
+        document.getElementById('xLeft').value = display.left;
+        document.getElementById('xRight').value = display.right;
         document.getElementById('rightSideOnly').checked =
           document.getElementById('xLeft').value === '0';
+        const yLine = lines.slice(i + 3).find(x => /^YRange\s+/.test(x.trim())) || '';
+        const yMatch = /^YRange\s+(\S+)\s+(\S+)$/.exec(yLine.trim());
+        document.getElementById('yMin').value = yMatch && yMatch[1] !== 'auto'
+          ? yMatch[1].replace(/,/g, ' ') : '';
+        document.getElementById('yMax').value = yMatch && yMatch[2] !== 'auto'
+          ? yMatch[2].replace(/,/g, ' ') : '';
+        // Retain positive legacy Graph heights if no explicit Y maximum
+        // was provided. The UI now synthesizes auto heights (zeros).
+        if (!yMatch && legacyHeights.some(v => Number(v) > 0)) {
+          document.getElementById('yMax').value =
+            legacyHeights.map(v => Number(v) > 0 ? v : 'auto').join(' ');
+        }
       }
       proposeSpinGroups();
     }
@@ -1264,11 +1468,9 @@
     let groupChangeTimer = null;
 
     function parseNumericList(text, name) {
-      const tokens = text.replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean);
-      if (!tokens.length) throw new Error(`${name} is empty.`);
-      const values = tokens.map(Number);
-      if (values.some(x => !Number.isFinite(x))) throw new Error(`Invalid ${name}.`);
-      return values;
+      const normalized = normalizeNumericList(text, name);
+      if (!normalized) throw new Error(`${name} is empty.`);
+      return normalized.split(/\s+/).map(Number);
     }
 
     function getSpinModel() {
@@ -1283,7 +1485,7 @@
       for (const raw of lines) {
         const line = raw.trim();
         if (!line || line.startsWith('#')) continue;
-        const parts = line.replace(/,/g, ' ').split(/\s+/);
+        const parts = normalizeNumericList(line, 'J-coupling row').split(/\s+/);
         if (parts.length !== 3) throw new Error(`Invalid J-coupling row: "${line}".`);
         const [a, b, v] = parts.map(Number);
         if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n || a === b || !Number.isFinite(v)) {
