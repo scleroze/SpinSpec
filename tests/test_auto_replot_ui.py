@@ -36,6 +36,13 @@ assert "const result = await calculateOrReuse(data)" in page
 assert "form.addEventListener('input'" in page
 assert "updateCalculationMode();" in page
 assert "fillFormFromSet(text);" in page
+assert 'id="lineWidth"' in page
+assert 'id="linewidths"' not in page
+assert "linewidths: getLinewidthsForEngine()" in page
+assert "return `${fwhm} 0`;" in page
+assert "function decodeSetDisplayWidth(widthLine, xRangeLine = '')" in page
+assert "const display = decodeSetDisplayWidth(lines[i + 2] || '', xLine);" in page
+assert "document.getElementById('lineWidth').value = display.fwhm;" in page
 
 parsed = Scripts()
 parsed.feed(page)
@@ -49,4 +56,35 @@ for index, source in enumerate(parsed.contents):
                                 capture_output=True, text=True)
         assert result.returncode == 0, (index, result.stderr)
 
-print("PASS: single-button auto-replot UI, .set loading and JavaScript syntax")
+# Execute the actual parser in Node, not a duplicate Python implementation.
+import json
+import re
+source = parsed.contents[0]
+begin = source.index("    function decodeSetDisplayWidth(")
+end = source.index("\\n    function fillFormFromSet(", begin)
+function_src = source[begin:end]
+cases = [
+    ("1 0", "", {"fwhm": "1", "left": "", "right": ""}),
+    ("0.2 20", "", {"fwhm": "0.2", "left": "-20", "right": "20"}),
+    ("1 220", "XRange auto 100",
+     {"fwhm": "1", "left": "-220", "right": "100"}),
+    ("1 0", "XRange 0 120",
+     {"fwhm": "1", "left": "0", "right": "120"}),
+    ("0.5 0", "XRange auto -10",
+     {"fwhm": "0.5", "left": "", "right": "-10"}),
+]
+node_js = function_src + "\\n" + "\\n".join(
+    "console.log(JSON.stringify(decodeSetDisplayWidth(" +
+    json.dumps(width) + "," + json.dumps(xrange) + ")));"
+    for width, xrange, _ in cases
+)
+with tempfile.NamedTemporaryFile(mode="w", suffix=".js") as source_file:
+    source_file.write(node_js)
+    source_file.flush()
+    result = subprocess.run(["node", source_file.name], text=True,
+                            capture_output=True)
+    assert result.returncode == 0, result.stderr
+    got = [json.loads(line) for line in result.stdout.splitlines()]
+    assert got == [expected for _, _, expected in cases], got
+
+print("PASS: one FWHM input, automatic blank X limits, .set backward compatibility")
