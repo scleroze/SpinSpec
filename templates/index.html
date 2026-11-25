@@ -207,7 +207,12 @@
     .advanced-spectrum-settings .field { margin-top: 10px; }
     .preview-alert {
       display: none;
-      margin: 12px 12px 8px;
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      right: 12px;
+      z-index: 5;
+      margin: 0;
       padding: 12px 14px;
       border: 1px solid #fca5a5;
       border-radius: 9px;
@@ -826,7 +831,7 @@
         const rateLimited = /HTTP 429/.test(message);
         alert.textContent = rateLimited
           ? 'Too many requests. Please wait a few seconds before calculating again.'
-          : message.replace(/^Error (calculating spectrum|loading example): /, '');
+          : message.replace(/^Error (calculating spectrum|loading example): /, '').slice(0, 300);
         alert.classList.add('visible');
         const panel = document.querySelector('.right-panel');
         if (panel) panel.scrollTo({top: 0, behavior: 'smooth'});
