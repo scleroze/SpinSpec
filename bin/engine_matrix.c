@@ -1338,6 +1338,53 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
 
     /* Pass argv directly; .set filenames may contain spaces, parentheses
      * or other shell metacharacters.  No shell interpretation is needed. */
+    /* Unified Gnuplot executable handles ordinary and optional group
+     * displays in one invocation. The legacy graph launcher is retained
+     * as a compatibility fallback for old standalone installations. */
+    if (access("./group_graph", X_OK) == 0) {
+        char frame_s[32], fwhm_s[64], width_s[64];
+        snprintf(frame_s, sizeof(frame_s), "%d", Bc);
+        snprintf(fwhm_s, sizeof(fwhm_s), "%.17g", fwhm_hz);
+        snprintf(width_s, sizeof(width_s), "%.17g", WidthSpectrum);
+        if(setenv("SPINSPEC_MODEL_FILE",Mfile,1)!=0) {
+            perror("SPINSPEC_MODEL_FILE");return EXIT_FAILURE;
+        }
+        char heights_spec[4096]={0};
+        size_t length=0;
+        for(int h=0;h<Sg;h++){
+            int written=snprintf(heights_spec+length,sizeof(heights_spec)-length,
+                "%s%d:%.17g",h?",":"",Sgm[h],V_size[h]);
+            if(written<0||(size_t)written>=sizeof(heights_spec)-length)
+                return EXIT_FAILURE;
+            length+=(size_t)written;
+        }
+        setenv("SPINSPEC_GRAPH_HEIGHTS",heights_spec,1);
+        char xl[64],xr[64];
+        if(isfinite(x_left_override))snprintf(xl,sizeof(xl),"%.17g",x_left_override);
+        else strcpy(xl,"auto");
+        if(isfinite(x_right_override))snprintf(xr,sizeof(xr),"%.17g",x_right_override);
+        else strcpy(xr,"auto");
+        setenv("SPINSPEC_X_LEFT",xl,1);
+        setenv("SPINSPEC_X_RIGHT",xr,1);
+        char *args[]={"./group_graph",frame_s,fwhm_s,width_s,NULL};
+        pid_t pid;
+        int err=posix_spawn(&pid,"./group_graph",NULL,NULL,args,environ);
+        if(err!=0){
+            fprintf(stderr,"Cannot start unified graph: %s\n",strerror(err));
+            return EXIT_FAILURE;
+        }
+        int status=0;
+        pid_t done;
+        do {done=waitpid(pid,&status,0);} while(done<0&&errno==EINTR);
+        unsetenv("SPINSPEC_MODEL_FILE");
+        unsetenv("SPINSPEC_GRAPH_HEIGHTS");
+        unsetenv("SPINSPEC_X_LEFT");
+        unsetenv("SPINSPEC_X_RIGHT");
+        if(done<0||!WIFEXITED(status)||WEXITSTATUS(status)!=0){
+            fprintf(stderr,"Unified graph failed (status=%d)\n",status);
+            return EXIT_FAILURE;
+        }
+    } else {
     char command[256];
     char graph_frame[32];
     snprintf(graph_frame, sizeof(graph_frame), "%d", Bc);
@@ -1411,6 +1458,7 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
               }
           }
           
+	     } /* end legacy compatibility fallback */
 	 printf("Cycle\n");
     B0 = B0 + BS;
     Bc++; 
