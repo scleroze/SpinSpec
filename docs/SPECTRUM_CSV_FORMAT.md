@@ -1,6 +1,6 @@
 # SpinSpec: numerical spectrum CSV formats
 
-This page describes the two numerical exports in SpinSpec v1.1.0 after the unified-observer correction. **The files contain discrete transition strengths before Lorentzian line broadening**, not samples from the plotted curves.
+This page describes the two numerical exports of SpinSpec v1.2.0, retaining the unified-observer correction introduced in v1.1.0. **The files contain discrete transition strengths before Lorentzian line broadening**, not samples from the plotted curves.
 
 Magnetic fields are entered in mT; all CSV transition frequencies are in **Hz**; transition strengths have **relative model units**. Neither mode models thermal populations, sample preparation, pulse sequences, relaxation, receiver response or calibrated experimental amplitudes.
 
@@ -63,7 +63,7 @@ O = sum_g O_g, where O_g = sum_{k in g} (gamma_k/gamma_H) I_{kx}.
 
 For distinct energy blocks `a < b`, the invariant strength is `||P_a O P_b||_F²`. For `a=b`, the half-sided zero-frequency convention is `(1/2)||P_a O P_a||_F²`. Therefore block energies and dimensions provide important context for degeneracies.
 
-**Zero-frequency rows remain in the CSV**, and the group plot now includes their invariant DC contribution. Negative interference is not a negative probability or a stand-alone signal.
+**Zero-frequency rows remain in the invariant CSV.** The group image includes a schematic absolute-frequency overview that can display 0 Hz. Local panels are Lorentz-broadened from the invariant table and can include DC if 0 Hz lies inside or near the selected frequency window; normally at nonzero field it lies outside that window. The DC term is not an independently detected AC resonance. Negative interference is not a negative probability or a stand-alone signal.
 
 ## Comparing ordinary and group modes
 
@@ -77,12 +77,12 @@ The CSV `frequency_hz` is an **absolute transition frequency** in Hz. The local 
 frequency_offset_hz = frequency_hz - reference_frequency_hz.
 ```
 
-The `Graph` list in the input selects frequency **windows**, not which spins are included in the Hamiltonian or CSV. Linewidth and window half-width affect broadened plots but not the original transition CSV values.
+The `Graph` list in the input selects frequency **windows**, not which spins are included in the Hamiltonian or CSV. FWHM and optional independent X/Y bounds affect the broadened plots but not original transition CSV values. The web replot pathway reuses cached transitions for display-only changes.
 
-Output filenames remain unchanged: `Sp_00000.dat`, `Res_<spin>_00000.dat`, `data_00000.jpg`, `group_curve_00000.dat` and `group_spectrum_00000.jpg`. The old equal-spin-weight strengths are **not** preserved as the default mode. Both plots now include the zero-frequency contribution. For the ordinary plot this comes from `Sp_dc_00000.dat`, which stores the full basis-invariant DC strength reconstructed as `Tr(O²)/2` minus all nonzero transition strengths. The ordinary raw per-eigenstate-pair CSV does not include diagonal elements and is not itself a complete DC decomposition. The group CSV retains the complete block-resolved invariant DC strength. Subsequent frames use `00001`, etc.
+Output filenames remain unchanged: `Sp_00000.dat`, `Res_<spin>_00000.dat`, `data_00000.jpg`, `group_curve_00000.dat` and `group_spectrum_00000.jpg`. The old equal-spin-weight strengths are **not** preserved as the default mode. Where the frequency window covers 0 Hz, ordinary and group plots may include its Lorentzian-broadened invariant strength. For the ordinary plot this comes from `Sp_dc_00000.dat`, storing the full basis-invariant DC strength reconstructed as `Tr(O²)/2` minus all nonzero transition strengths. The ordinary raw per-eigenstate-pair CSV does not include diagonal elements and is not itself a complete DC decomposition. The group CSV retains the complete block-resolved invariant DC strength. Subsequent frames use `00001`, etc.
 
 ## Web UI
 
 After **Calculate spectrum**, expand **Export numerical transition data (CSV)** below the spectrum image. The offered file follows the checkbox **Calculate contributions of spin groups**. The [web tutorial](https://nmrspec.org/tutorial#data-export) has a parallel column reference.
 
-*Deployment status, 19 November 2026: the new ordinary CSV download and combined export panel are being tested on the separate test server. Do not assume this UI has already been deployed to the public site.*
+*Deployment status, 25 November 2026: ordinary and grouped calculations, CSV exports, and display-only replot passed end-to-end API smoke tests on the public SpinSpec 1.2.0 server. The current online limit is eight spin-1/2 nuclei.*
