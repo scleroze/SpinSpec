@@ -77,6 +77,30 @@ static int read_graph_heights(double heights[MAX_SPINS]) {
     return 0;
 }
 
+/* Optional spin-indexed intensity bounds. Missing entries use auto. */
+static int read_y_limits(const char *name, double values[MAX_SPINS]) {
+    const char *text = getenv(name);
+    for (int i=0;i<MAX_SPINS;i++) values[i]=NAN;
+    if (!text || !*text) return 0;
+    int seen[MAX_SPINS]={0};
+    while (*text) {
+        char *end=NULL;
+        long spin=strtol(text,&end,10);
+        if (end==text || spin<0 || spin>=MAX_SPINS ||
+            *end!=':' || seen[spin]) return -1;
+        text=end+1;
+        double val=strtod(text,&end);
+        if (end==text || !isfinite(val)) return -1;
+        values[spin]=val;
+        seen[spin]=1;
+        if (!*end) break;
+        if (*end!=',') return -1;
+        text=end+1;
+        if (!*text) return -1;
+    }
+    return 0;
+}
+
 typedef struct {
     int representative_spin;
     double center;
@@ -294,8 +318,11 @@ int main(int argc,char **argv) {
     }
     fclose(data);
     double heights[MAX_SPINS]={0};
-    if (read_graph_heights(heights)!=0) {
-        fprintf(stderr,"Malformed SPINSPEC_GRAPH_HEIGHTS environment\n");
+    double y_lower[MAX_SPINS], y_upper[MAX_SPINS];
+    if (read_graph_heights(heights)!=0 ||
+        read_y_limits("SPINSPEC_Y_MIN",y_lower)!=0 ||
+        read_y_limits("SPINSPEC_Y_MAX",y_upper)!=0) {
+        fprintf(stderr,"Malformed graph Y limits environment\n");
         free(lines);return 1;
     }
     int member_ids[MAX_SPINS]={0};
@@ -543,11 +570,25 @@ int main(int argc,char **argv) {
         }
         fprintf(gp,"set xrange [%.17g:%.17g]\n",
                 panel_left,panel_right);
-        /* Graph heights limits the positive Y maximum.  The negative end
-         * stays automatic so signed Interference is never silently hidden.
-         * Height 0 preserves the current automatic scale. */
-        if (p->spin>=0 && p->spin<MAX_SPINS && heights[p->spin]>0.0)
-            fprintf(gp,"set yrange [*:%.17g]\n",heights[p->spin]);
+        /* Y min and max are independent. Automatic scaling keeps the
+         * entire signed interference curve visible by default. */
+        double low=NAN, high=NAN;
+        if (p->spin>=0 && p->spin<MAX_SPINS) {
+            low=y_lower[p->spin];
+            high=y_upper[p->spin];
+            if (!isfinite(high) && heights[p->spin]>0.0)
+                high=heights[p->spin]; /* legacy upper limit */
+        }
+        if (isfinite(low) && isfinite(high) && low>=high) {
+            fprintf(stderr,"Y minimum >= Y maximum for spin %d\n",p->spin);
+            fclose(gp);free(lines);return 2;
+        }
+        if (isfinite(low) && isfinite(high))
+            fprintf(gp,"set yrange [%.17g:%.17g]\n",low,high);
+        else if (isfinite(low))
+            fprintf(gp,"set yrange [%.17g:*]\n",low);
+        else if (isfinite(high))
+            fprintf(gp,"set yrange [*:%.17g]\n",high);
         else
             fprintf(gp,"set yrange [*:*]\n");
         fprintf(gp,"set key inside top right horizontal\n");
