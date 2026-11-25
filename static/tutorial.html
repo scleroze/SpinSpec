@@ -12,12 +12,14 @@
 <!-- SPINSPEC_DOCS_NAV_V11 -->
 <header class="sitebar"><div class="site-container sitebar-inner">
 <a class="site-logo" href="/">Spin<span>Spec</span></a>
+<span style="font-size:13px;font-weight:700;color:#566579">v1.2.0</span>
 <nav class="site-nav" aria-label="Site navigation">
-<a href="/">Calculator</a><a href="/about">About (EN)</a><a href="/ru">Описание (RU)</a><a href="/tr">Tanıtım (TR)</a>
+<a href="/">Calculator</a><a href="/changes">Version history</a><a href="/about">About (EN)</a><a href="/ru">Описание (RU)</a><a href="/tr">Tanıtım (TR)</a>
 </nav></div></header>
 <div class="site-container">
 <div class="guide-header"><h1>SpinSpec Web Tutorial</h1>
-<p class="subtitle">Illustrated guide to spin-system parameters, calculations, group-resolved spectra and numerical data export.</p></div>
+<p class="subtitle">Illustrated guide to spin-system parameters, calculations, group-resolved spectra and numerical data export.</p>
+<p style="font-size:14px;margin:12px 0 0"><a href="#spin-groups">Spin-group setup and physics</a> · <a href="#additional-settings">Advanced display settings</a> · <a href="#data-export">CSV columns and units</a></p></div>
 </div>
 
 <main class="site-container guide-content">
@@ -72,11 +74,11 @@
       </div>
       <div class="field">
         <b>Graph heights</b>
-        <p>Vertical scale for each displayed spectrum. The number of values should match the number of displayed spins.</p>
+        <p>One vertical scale value per displayed spin. <code>0</code> selects automatic height; a positive number fixes the upper Y-axis limit. In group mode the negative axis remains automatic to show signed interference.</p>
       </div>
       <div class="field">
         <b>Line width and spectrum width (Hz)</b>
-        <p>The first number is the Lorentzian line-width parameter. The second number is the displayed spectral window half-width in Hz.</p>
+        <p>Two values in Hz: Lorentzian full width at half maximum (FWHM), followed by the half-width of the ordinary display window. Set the second value to <code>0</code> for automatic horizontal scale (including independently fitted group panels); any positive value is an exact manual half-width.</p>
       </div>
     </div>
   </section>
@@ -93,7 +95,7 @@
   </section>
 
   <section>
-    <h2>6. Where to find chemical shifts and J-couplings</h2>
+    <h2>5. Where to find chemical shifts and J-couplings</h2>
     <p>Chemical shifts and scalar J-coupling constants can be taken from experimental NMR databases, spectral tables, or original literature. Always check the solvent, reference compound, temperature, and nucleus, because these parameters may affect the reported values.</p>
     <div class="grid">
       <div class="field">
@@ -168,7 +170,7 @@
       <img src="/static/1_7.png" alt="Displayed spin numbers">
       <figcaption>Here the spectra for spins 0, 3, and 5 will be displayed.</figcaption>
     </figure>
-    <p>The <b>Graph heights</b> field controls the vertical scale of each plotted spectrum. The order follows the displayed spin numbers.</p>
+    <p>The <b>Graph heights</b> field controls the vertical scale of each plotted spectrum. The order follows the displayed spin numbers. Enter <code>0 0 0</code> for three automatically scaled panels or specify positive values to set their upper intensity limits.</p>
     <figure>
       <img src="/static/1_8.png" alt="Graph heights">
       <figcaption>Three graph-height values for three displayed spins.</figcaption>
@@ -181,8 +183,8 @@
     <table>
       <thead><tr><th>Value</th><th>Meaning</th><th>Example</th></tr></thead>
       <tbody>
-        <tr><td>Line width</td><td>Lorentzian line-width parameter used to draw peaks.</td><td><code>0.05</code></td></tr>
-        <tr><td>Spectrum width</td><td>Half-width of the displayed spectrum around the central NMR frequency.</td><td><code>20</code></td></tr>
+        <tr><td>Line width</td><td>Lorentzian full width at half maximum (FWHM), used for display broadening only.</td><td><code>0.5</code></td></tr>
+        <tr><td>Spectrum width</td><td>Half-width in Hz: <code>0</code> selects automatic X scaling; any positive number uses that exact half-width in ordinary and grouped plots.</td><td><code>0</code> (auto) or <code>100</code> (manual)</td></tr>
       </tbody>
     </table>
     <figure>
@@ -192,8 +194,58 @@
     <p>Press <b>Save set</b> to store the current input, <b>Open set</b> to load an existing file, or <b>Calculate spectrum</b> to run the Hamiltonian calculation and generate the plotted spectra.</p>
   </section>
 
+  <!-- SPINSPEC_GROUP_MODE_GUIDE_V12 -->
+  <section id="spin-groups">
+    <h2>10. Spin-group spectra: setup and interpretation</h2>
+    <p>Enable <b>Calculate contributions of spin groups</b> under <b>Group-resolved spectrum (optional)</b>. SpinSpec retains <b>all spins</b> in the Hamiltonian, even when only selected group panels are displayed. The groups partition the <em>observation operator</em>; they do not remove J-couplings or change the calculated eigenenergies.</p>
+
+    <h3>Choosing groups in the web interface</h3>
+    <ol>
+      <li>Load a model, such as <b>Fluoroethane</b>, from <b>Examples</b>.</li>
+      <li>Enable <b>Calculate contributions of spin groups</b>. The application proposes group assignments using approximate gyromagnetic ratios, chemical shifts and patterns of J-couplings.</li>
+      <li>Check the <b>Group 0 / Group 1 / ...</b> selectors next to each spin. These are suggestions, <b>not a proof of strict magnetic equivalence</b>.</li>
+      <li>Choose <b>Auto-detect groups</b> to regenerate the suggestions after editing the spin model, or <b>Separate all spins</b> to assign one group to every spin.</li>
+      <li>Use the selectors to combine or split groups manually. Alternatively expand <b>Advanced: edit group IDs</b> and enter one integer (0–9) per spin in spin order.</li>
+      <li>Press <b>Calculate spectrum</b>. A second image shows each group's strength, the full strength and the signed interference. The invariant CSV can be downloaded below it.</li>
+    </ol>
+    <div class="note">
+      <b>Fluoroethane example:</b> six spins indexed <code>0 1 2 3 4 5</code>.
+      Enter <code>0 0 0 1 1 2</code> in the advanced group-ID field to assign CH<sub>3</sub> protons (0–2) to group 0, CH<sub>2</sub> protons (3–4) to group 1, and the <sup>19</sup>F spin (5) to group 2. IDs identify observation components, <em>not</em> chemical elements.
+    </div>
+
+    <h3>What the colored curves mean</h3>
+    <p>The observation operator used in <b>both ordinary and group modes</b> is a signed gamma-weighted transverse spin operator. For spin group <em>g</em>, let
+    <code>O_g = sum_(k in g) (gamma_k / gamma_H) I_kx</code>; the complete operator is <code>O = sum_g O_g</code>. For a transition, each group contributes a real amplitude <code>D_g</code> and strength <code>|D_g|^2</code>. Their coherent sum gives</p>
+    <div class="formula-box">
+      S<sub>total</sub> = &Sigma;<sub>g</sub> S<sub>g</sub> + S<sub>interference</sub>
+      <p>S<sub>interference</sub> collects cross terms of group amplitudes. It may be positive or negative; the total transition strength remains non-negative.</p>
+    </div>
+    <p>In the plot the thick colored line is the selected group, the thin gray line is <b>Total</b>, and the cyan line is <b>Interference</b>. The <b>Total</b> overlay is repeated in each local window for comparison; it is not an additional independent group. Negative interference indicates cancellation between amplitudes, <em>not negative measured absorption</em>.</p>
+    <p><b>Invariant DC:</b> numerically degenerate energy states can contribute at 0 Hz. The group CSV includes the invariant zero-frequency contribution; the dynamic group curves do not draw it as an AC peak. See <a href="#data-export">CSV export</a> for definitions and the exact sum rule.</p>
+    <p><b>Scientific limitation:</b> these are relative squared operator matrix elements. The model does not include spin populations, pulse preparation, relaxation, receiver transfer functions, or calibrated experimental signal intensities. Assigning a group is an analysis choice, not a claim that it can be measured independently.</p>
+  </section>
+
+  <section id="additional-settings">
+    <h2>11. Additional settings and display controls</h2>
+    <table>
+      <thead><tr><th>Control</th><th>Behavior</th></tr></thead>
+      <tbody>
+        <tr><td><b>External field</b> and <b>enter as ¹H frequency (MHz)</b></td><td>Normally enter B in mT. With the checkbox selected, enter the nominal proton Larmor frequency in MHz; the browser converts it to B using <code>gamma_H = 42.57747892 MHz/T</code>. The calculation and saved <code>.set</code> file use mT.</td></tr>
+        <tr><td><b>Displayed spin numbers</b></td><td>Zero-based indices select local reference windows, not which spins enter the Hamiltonian. In the web interface, group mode automatically uses one representative spin (the first spin by index) from each nonempty observer group for its display windows. This is independent of the list typed into <b>Displayed spin numbers</b>; ordinary mode keeps that list unchanged. The underlying Hamiltonian always includes every spin.</td></tr>
+        <tr><td><b>Graph heights</b></td><td>Enter one value per displayed spin; <code>0</code> means automatic vertical scale. A positive value sets the upper Y-axis limit, which can clip strong peaks. In grouped spectra the negative extent is still automatic to retain interference.</td></tr>
+        <tr><td><b>Line width and spectrum width (Hz)</b></td><td>For example <code>1 220</code> means FWHM 1 Hz and a fixed half-width ±220 Hz in ordinary and grouped plots. <code>1 0</code> means FWHM 1 Hz and automatic X scaling: the ordinary plot fits significant nearby transitions; each group panel fits its group transitions with a safety margin. The numerical transitions and CSV remain unchanged.</td></tr>
+        <tr><td><b>Advanced: edit group IDs</b></td><td>Provide exactly one group ID per spin (0–9), e.g. <code>0 0 0 1 1 2</code>. Manual assignments are preserved while editing until <b>Auto-detect groups</b> is selected.</td></tr>
+        <tr><td><b>Save set / Open set</b></td><td>Save or restore Hamiltonian and display parameters. Spin-group assignments are a separate web setting and <b>are not stored</b> in the current <code>.set</code> format; after reloading, review the proposed groups.</td></tr>
+        <tr><td><b>Interactive mode</b></td><td>Open the computed spectrum in a new tab. Its navigation buttons labeled <b>Group 1</b>, etc., refer to <em>frequency clusters</em>, not to the spin-group IDs defined above.</td></tr>
+      </tbody>
+    </table>
+    <div class="note">
+      Automatic horizontal scaling (second width value <code>0</code>) affects ordinary and grouped <b>display windows only</b>. It is not a selection rule for computed transitions. Because insignificant or distant lines may be outside the automatic window, use a positive manual width or the exported CSV to inspect the full calculated transitions.
+    </div>
+  </section>
+
   <section>
-    <h2>10. Example input: tri-propyl phosphate</h2>
+    <h2>12. Example input: tri-propyl phosphate</h2>
     <p>The screenshots above show a six-spin reduced model for tri-propyl phosphate. The input can be represented in a <code>.set</code>-style form as:</p>
     <pre><code># TriPropylPhosphate
 42.578 42.578 42.578 42.578 42.578 17.24
@@ -217,7 +269,7 @@ Graph 0 3 5
   </section>
 
   <section>
-    <h2>11. Common checks</h2>
+    <h2>13. Common checks</h2>
     <ul>
       <li>The number of gyromagnetic ratios must equal the number of chemical shifts.</li>
       <li>Spin indices in J-couplings must refer to existing spins.</li>
@@ -228,7 +280,7 @@ Graph 0 3 5
   </section>
 
   <section>
-  <h2>Interactive mode</h2>
+  <h2>14. Interactive mode</h2>
 
   <p>
     After a spectrum has been calculated, the standard preview image is shown in the main window.
@@ -268,7 +320,7 @@ Graph 0 3 5
 </section>
   <!-- SPINSPEC_CSV_EXPORT_V1 -->
   <section id="data-export">
-    <h2>12. Exporting numerical transition data (CSV)</h2>
+    <h2>15. Exporting numerical transition data (CSV)</h2>
     <p>After pressing <b>Calculate spectrum</b>, expand <b>Export numerical transition data (CSV)</b>
        below the plot. The exported file follows the selected calculation mode.
        A CSV file stores discrete transition positions and strengths <b>before Lorentzian broadening</b>.
@@ -282,14 +334,14 @@ Graph 0 3 5
       <tbody>
         <tr><td><code>state_i</code>, <code>state_j</code></td><td>Eigenstate indices, numbered from 1 (the diagonalizer's order is not an energy ranking)</td></tr>
         <tr><td><code>frequency_hz</code></td><td>Absolute transition frequency |E<sub>j</sub> - E<sub>i</sub>|/h, in Hz</td></tr>
-        <tr><td><code>relative_strength</code></td><td>Squared matrix element of the legacy equal-weight spin-flip observation operator; relative units</td></tr>
+        <tr><td><code>relative_strength</code></td><td>Squared matrix element of the signed gamma-weighted transverse observation operator; relative units</td></tr>
       </tbody>
     </table>
     <pre><code>state_i,state_j,frequency_hz,relative_strength
 1,2,2128.400000,0.250000
 1,3,2131.200000,0.500000</code></pre>
     <p><small>Numbers in the example above are illustrative, not a particular molecule.
-      Frequencies and strengths have the precision of the original six-decimal-place legacy file.</small></p>
+      The current engine writes full-precision numerical transition values.</small></p>
 
     <h3>Group contributions — Sp_invariant_00000.csv</h3>
     <p>One row represents a pair of distinct or identical <b>energy blocks</b>, where each block contains
@@ -314,8 +366,9 @@ Graph 0 3 5
     <div class="note">
       Rows with <code>frequency_hz = 0</code> are retained in the invariant CSV, but the
       plotted dynamic group spectrum omits this DC contribution. The ordinary and group modes
-      use <b>different observation operators</b>: equal spin-flip weights versus gyromagnetic
-      weights. Their numerical strengths must not be directly compared as absolute intensities.
+      use the <b>same gamma-weighted observation operator</b>. Their exported rows are organized
+      differently (eigenstate pairs versus invariant energy blocks), and numerical strengths should
+      be compared after appropriate frequency or energy-block aggregation, not by state labels.
       Neither export includes thermal level populations, excitation/preparation, relaxation,
       receiver response or absolute experimental signal calibration.
     </div>

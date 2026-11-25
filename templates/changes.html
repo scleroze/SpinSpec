@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="SpinSpec version history, scientific software release notes and numerical validation results.">
+  <link rel="icon" href="/static/favicon.ico">
+  <link rel="stylesheet" href="/static/about.css">
+  <link rel="canonical" href="https://nmrspec.org/changes">
+  <title>SpinSpec — Version history</title>
+</head>
+<body>
+<header class="sitebar"><div class="site-container sitebar-inner">
+  <div style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap">
+    <a class="site-logo" href="/">Spin<span>Spec</span></a>
+    <span style="font-size:13px;font-weight:700;color:#566579">v1.2.0</span>
+  </div>
+  <nav class="site-nav" aria-label="Main navigation">
+    <a href="/">Calculator</a>
+    <a href="/about">About (EN)</a>
+    <a href="/ru">Описание (RU)</a>
+    <a href="/tr">Tanıtım (TR)</a>
+    <a href="/tutorial">Tutorial</a>
+    <a href="https://github.com/scleroze/SpinSpec" target="_blank" rel="noopener noreferrer">GitHub</a>
+  </nav>
+</div></header>
+<main class="site-container site-main">
+  <div class="guide-header">
+    <div class="eyebrow">Scientific software · release notes</div>
+    <h1>Version history</h1>
+    <p class="subtitle">Changes to the online SpinSpec simulator. Numerical strengths are relative; the current web limit is 8 spin-½ nuclei.</p>
+  </div>
+  <section class="section-block">
+    <div class="section-card">
+      <h2>SpinSpec 1.2.0 <small style="font-size:13px;color:#566579">November 2026</small></h2>
+      <ul>
+        <li>Faster exact diagonalization using conserved total spin projection (M<sub>z</sub>) blocks.</li>
+        <li>Accelerated gamma-weighted observer transformation and transition calculations.</li>
+        <li>Nine-spin benchmarks: approximately 22× faster at 3 T and 49× faster at zero field in the validated benchmark environment. Speed depends on hardware and the spin system.</li>
+        <li>Compared with the reference engine, maximum line-frequency deviations were approximately 1.66 × 10<sup>−5</sup> Hz at 3 T and 1.68 × 10<sup>−12</sup> Hz at zero field; the invariant DC contribution matched.</li>
+        <li>Corrected magnetic-field, linewidth and automatic graph-height settings across 17 example files.</li>
+        <li>Optional automatic horizontal scaling: enter a zero spectrum half-width to fit significant transitions in ordinary and group panels. Positive widths retain exact manual control.</li>
+        <li>Input parameters and export data formats remain compatible; the public web limit remains 8 spins.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="section-block">
+    <div class="section-card">
+      <h2>SpinSpec 1.1 <small style="font-size:13px;color:#566579">November 2026</small></h2>
+      <ul>
+        <li>Optional spin-group resolved observation with a signed gamma-weighted transverse operator.</li>
+        <li>Group strengths, total strengths and signed interference.</li>
+        <li>Invariant energy-block treatment of zero-frequency (DC) components.</li>
+        <li>CSV exports of discrete transitions and group-resolved invariant spectra.</li>
+        <li>Automatic group display windows, refreshed web layout and an organized example catalog.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="section-block">
+    <div class="section-card">
+      <h2>SpinSpec 1.0.0 <small style="font-size:13px;color:#566579">Initial archived release</small></h2>
+      <ul>
+        <li>Hamiltonian construction and diagonalization for coupled spin-½ systems.</li>
+        <li>Transition frequencies, relative line strengths and Lorentz-broadened visual spectra.</li>
+        <li>Magnetic-field, chemical-shift and isotropic J-coupling inputs.</li>
+        <li>Permanent archive: <a href="https://doi.org/10.5281/zenodo.23696822">DOI 10.5281/zenodo.23696822</a>.</li>
+      </ul>
+    </div>
+  </section>
+  <section class="section-block">
+    <div class="section-card">
+      <h2>Reproducibility</h2>
+      <p>For scientific use, record the software version, the full input <code>.set</code> file, the observation mode and the exported results. Detailed source changes and Git commits are available in the <a href="https://github.com/scleroze/SpinSpec">SpinSpec GitHub repository</a>.</p>
+      <p>The online simulator does not model experimental state populations, pulse preparation or receiver response; calculated strengths are relative.</p>
+    </div>
+  </section>
+</main>
+<footer class="site-footer"><div class="site-container"><span>© 2026 SpinSpec · Version history</span><a href="/">Return to calculator</a></div></footer>
+</body>
+</html>

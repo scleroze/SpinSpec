@@ -63,14 +63,14 @@ jobs:
           assert all(len(s)==5 and all(math.isfinite(v) for v in s) for s in samples)
           # Total = group0 + group1 + signed interference
           assert max(abs(s[1]-s[2]-s[3]-s[4]) for s in samples)<1e-6
-          # 2 group panels: JPEG width 1800 and height 180+470*2.
+          # 2 group panels: JPEG width 1800 and height 150+360*2 (group_graph.c).
           with open('group_spectrum_00000.jpg','rb') as im:
               assert im.read(2)==b'\xff\xd8'
               data=im.read()
           import re
           sof=re.search(b'[\xff][\xc0\xc1\xc2]\x00\x11\x08(..)(..)',data,re.S)
           assert sof, 'missing JPEG SOF marker'
-          assert int.from_bytes(sof.group(1),'big')==1120
+          assert int.from_bytes(sof.group(1),'big')==870
           assert int.from_bytes(sof.group(2),'big')==1800
           print("PASS: C/Gnuplot J-lines, group closure, invariant DC, 2-panel group layout")
           PY

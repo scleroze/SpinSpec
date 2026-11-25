@@ -25,6 +25,10 @@
 #include "observer_invariant.h"
 #include <ctype.h>
 #include <time.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <errno.h>
+extern char **environ;
 #define MAX_LINE_LENGTH 1024
 #define MAX_WORD_LENGTH 256
 
@@ -72,6 +76,42 @@ static double ss_wall_seconds(void)
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + 1e-9 * ts.tv_nsec;
+}
+
+/*
+ * Zero Graph spectrum half-width requests automatic horizontal scaling.
+ * Choose significant transitions near each selected spin's Larmor reference.
+ * J-couplings set a conservative search region so distant isotope resonances
+ * cannot dictate the window. This affects Res/graph output only, not Sp/CSV.
+ * A strictly positive user half-width bypasses this function completely.
+ */
+static double ss_auto_spectrum_half_width(const double *spr, size_t count,
+                                          double reference_hz, double fwhm_hz,
+                                          double total_abs_j_hz)
+{
+    const double search_radius = fmax(40.0,
+        fmax(50.0 * fwhm_hz, 2.0 * total_abs_j_hz + 10.0 * fwhm_hz));
+    double peak = 0.0;
+    for (size_t n = 0; n < count; ++n) {
+        const double delta = fabs(spr[2 * n] - reference_hz);
+        const double strength = spr[2 * n + 1];
+        if (delta <= search_radius && strength > peak)
+            peak = strength;
+    }
+
+    const double minimum = fmax(10.0, 12.0 * fwhm_hz);
+    if (peak <= 0.0)
+        return minimum;
+
+    const double cutoff = fmax(1e-15, peak * 1e-8);
+    double outer = 0.0;
+    for (size_t n = 0; n < count; ++n) {
+        const double delta = fabs(spr[2 * n] - reference_hz);
+        if (delta <= search_radius &&
+            spr[2 * n + 1] >= cutoff && delta > outer)
+            outer = delta;
+    }
+    return fmax(minimum, outer * 1.12 + fmax(4.0 * fwhm_hz, 2.0));
 }
 
 int main(int argc, char *argv[]) {
@@ -306,7 +346,13 @@ int main(int argc, char *argv[]) {
  * The Lorentzian half-width at half maximum is gamma = FWHM/2.
  */
 double fwhm_hz, WidthLine, WidthSpectrum;
-fscanf(file, "%lf %lf\n", &fwhm_hz, &WidthSpectrum);
+if (fscanf(file, "%lf %lf", &fwhm_hz, &WidthSpectrum) != 2 ||
+    !isfinite(fwhm_hz) || fwhm_hz <= 0.0 ||
+    !isfinite(WidthSpectrum) || WidthSpectrum < 0.0) {
+    fprintf(stderr, "Invalid Graph widths: expected positive FWHM and nonnegative half-width.\n");
+    fclose(file);
+    return EXIT_FAILURE;
+}
    fclose(file);
 double gamma = fwhm_hz / 2.0;
 WidthLine = gamma * gamma;
@@ -1151,12 +1197,26 @@ fprintf(stderr, "PROFILE grouping: %.3f s\n",
 	    double Sgp[2][2000]; // frequency grid and Lorentzian intensity
 	    double Freq[10];
 	    char Kfile[50];
+        double total_abs_j_hz = 0.0;
+        if (WidthSpectrum == 0.0) {
+            for (int a = 0; a < S; ++a)
+                for (int b = a + 1; b < S; ++b)
+                    total_abs_j_hz += fabs(Jm[a][b]);
+        }
 
 	    double ss_t_broad = ss_wall_seconds();
 for (m=0; m<Sg; m++) { // one display window per selected spin
                 printf("spin %i %d\n", m, Sgm[m]);
                 Freq[m] = fabs(B0*G[Sgm[m]]*(1-Sigma[Sgm[m]]/1e6)); // reference Larmor frequency in Hz
                 printf("frequency %i %lf\n", m, Freq[m]);
+                const double panel_half_width = WidthSpectrum > 0.0
+                    ? WidthSpectrum
+                    : ss_auto_spectrum_half_width(Spr, spr_count, Freq[m],
+                                                   fwhm_hz, total_abs_j_hz);
+                if (WidthSpectrum == 0.0)
+                    fprintf(stderr,
+                        "AUTO X-RANGE spin=%d selected=%.6g Hz\n",
+                        Sgm[m], panel_half_width);
 	       sprintf(Kfile, "Res_%d_%05d.dat", Sgm[m], Bc); // write the broadened display spectrum
 	       fsi = fopen(Kfile, "w");
            if (fsi == NULL) {
@@ -1170,7 +1230,7 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
 	        * invariant DC contribution; do not use basis-dependent raw
 	        * i<j entries for numerically degenerate levels. */
 	       for (i=0; i<2000; i++) {
-	           Sgp[0][i] = -WidthSpectrum + WidthSpectrum*i/1000.0;
+	           Sgp[0][i] = -panel_half_width + panel_half_width*i/1000.0;
 	           Sgp[1][i] = 0.0;
 	       }
 	       for (i=0; i<(int)spr_count; i++) {
@@ -1195,9 +1255,31 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
           fprintf(stderr, "PROFILE broadening: %.3f s\n",
         ss_wall_seconds() - ss_t_broad);
 
+    /* Pass argv directly; .set filenames may contain spaces, parentheses
+     * or other shell metacharacters.  No shell interpretation is needed. */
     char command[256];
-          sprintf(command, "./matrix_graph %s %d", Mfile, Bc); // invoke the graphing helper for this field step
-          system(command);
+    char graph_frame[32];
+    snprintf(graph_frame, sizeof(graph_frame), "%d", Bc);
+    char *graph_argv[] = {"./matrix_graph", Mfile, graph_frame, NULL};
+    pid_t graph_pid;
+    int spawn_error = posix_spawn(&graph_pid, "./matrix_graph",
+                                  NULL, NULL, graph_argv, environ);
+    if (spawn_error != 0) {
+        fprintf(stderr, "Cannot start matrix_graph: %s\n",
+                strerror(spawn_error));
+        return EXIT_FAILURE;
+    }
+    int matrix_plot_status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(graph_pid, &matrix_plot_status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited < 0 || !WIFEXITED(matrix_plot_status) ||
+        WEXITSTATUS(matrix_plot_status) != 0) {
+        fprintf(stderr, "matrix_graph failed (status=%d)\n",
+                matrix_plot_status);
+        return EXIT_FAILURE;
+    }
           /* In optional group mode, render the invariant result through
              SpinSpec's native C/Gnuplot plotting path as a separate JPEG.
              Legacy data_*.jpg and Res_*.dat remain untouched. */
@@ -1206,7 +1288,8 @@ for (m=0; m<Sg; m++) { // one display window per selected spin
               if (groups_mode && *groups_mode) {
                   char group_command[192];
                   snprintf(group_command, sizeof(group_command),
-                           "./group_graph %d %.12g", Bc, fwhm_hz);
+                           "./group_graph %d %.12g %.17g", Bc, fwhm_hz,
+                           WidthSpectrum);
                   /* Pass Graph heights in spin-indexed form, rather than
                    * panel order: Graph 3 0 and Graph 0 3 must both work.
                    * A non-positive height requests automatic Y scaling. */
